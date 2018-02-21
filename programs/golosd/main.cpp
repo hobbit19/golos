@@ -20,6 +20,7 @@
 #include <golos/plugins/debug_node/plugin.hpp>
 #include <golos/plugins/raw_block/plugin.hpp>
 #include <golos/plugins/block_info/plugin.hpp>
+#include <golos/plugins/mongo_db/mongo_db_plugin.hpp>
 
 #include <fc/interprocess/signals.hpp>
 #include <fc/log/console_appender.hpp>
@@ -70,6 +71,7 @@ namespace golos {
             appbase::app().register_plugin<golos::plugins::raw_block::plugin>();
             appbase::app().register_plugin<golos::plugins::block_info::plugin>();
             appbase::app().register_plugin<golos::plugins::debug_node::plugin>();
+            appbase::app().register_plugin<golos::plugins::mongo_db::mongo_db_plugin>();
             ///plugins
         };
     }
