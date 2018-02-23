@@ -29,6 +29,7 @@ namespace mongo_db {
 
         std::string db_name;
         static const std::string blocks_col;
+        static const std::string trans_col;
 
         mongocxx::instance mongo_inst;
         mongocxx::client mongo_conn;
