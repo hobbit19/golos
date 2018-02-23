@@ -11,8 +11,6 @@ namespace golos {
 namespace plugins {
 namespace mongo_db {
 
-    DEFINE_API_ARGS(process_block, json_rpc::msg_pack, json_rpc::void_type)
-
     class mongo_db_plugin final : public appbase::plugin<mongo_db_plugin> {
         public:
 
@@ -34,8 +32,6 @@ namespace mongo_db {
         void plugin_startup() override;
 
         void plugin_shutdown() override;
-
-        DECLARE_API((process_block))
 
         constexpr const static char *plugin_name = "mongo_db";
 

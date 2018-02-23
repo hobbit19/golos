@@ -3,39 +3,39 @@
 #include <golos/plugins/chain/plugin.hpp>
 #include <golos/protocol/block.hpp>
 
-
-#define CHECK_ARG_SIZE(s) \
-   FC_ASSERT( args.args->size() == s, "Expected #s argument(s), was ${n}", ("n", args.args->size()) );
-
+#include <golos/plugins/mongo_db/mongo_db_writer.hpp>
 
 namespace golos {
 namespace plugins {
 namespace mongo_db {
 
-    using golos::plugins::json_rpc::void_type;
+    using golos::protocol::signed_block;
 
     class mongo_db_plugin::mongo_db_plugin_impl {
     public:
-        mongo_db_plugin_impl(mongo_db_plugin &plugin)
+        mongo_db_plugin_impl(mongo_db_plugin &plugin, const std::string& uri_str)
                 : _my(plugin),
-                  _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()){
+                  _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()),
+                  writer(uri_str) {
         }
 
-        ~mongo_db_plugin_impl() {
-        }
+        ~mongo_db_plugin_impl() = default;
 
-        void process_block(const golos::protocol::signed_block &block);
+        void on_block(const signed_block &block);
 
         golos::chain::database &database() const {
             return _db;
         }
 
+        mongo_db_writer writer;
         mongo_db_plugin &_my;
 
         golos::chain::database &_db;
     };
 
-    void mongo_db_plugin::mongo_db_plugin_impl::process_block(const golos::protocol::signed_block &block) {
+    void mongo_db_plugin::mongo_db_plugin_impl::on_block(const signed_block &block) {
+        ilog("mongo_db plugin: on_block");
+
 
     }
 
@@ -56,10 +56,29 @@ namespace mongo_db {
     void mongo_db_plugin::plugin_initialize(const boost::program_options::variables_map &options) {
         try {
             ilog("mongo_db plugin: plugin_initialize() begin");
-            _my.reset(new mongo_db_plugin_impl(*this));
+
+            // First init mongo db
+            if (options.count("mongodb-uri")) {
+                ilog("initializing mongo_db_plugin");
+
+                std::string uri_str = options.at("mongodb-uri").as<std::string>();
+                ilog("connecting to ${u}", ("u", uri_str));
+
+                _my.reset(new mongo_db_plugin_impl(*this, uri_str));
+
+                // Set applied block listener
+                auto &db = _my->database();
+
+                db.applied_block.connect([&](const signed_block &b) {
+                    _my->on_block(b);
+                });
+
+            } else {
+                wlog("golos::mongo_db_plugin configured, but no --mongodb-uri specified.");
+                wlog("mongo_db_plugin disabled.");
+            }
 
             ilog("mongo_db plugin: plugin_initialize() end");
-            JSON_RPC_REGISTER_API ( name() ) ;
         } FC_CAPTURE_AND_RETHROW()
     }
 
@@ -73,16 +92,6 @@ namespace mongo_db {
         ilog("mongo_db plugin: plugin_shutdown() begin");
 
         ilog("mongo_db plugin: plugin_shutdown() end");
-    }
-
-    DEFINE_API(mongo_db_plugin, process_block) {
-        CHECK_ARG_SIZE(1)
-        auto block = args.args->at(0).as<golos::protocol::signed_block>();
-        auto &db = _my->database();
-        return db.with_read_lock([&]() {
-            _my->process_block(block);
-            return void_type();
-        });
     }
 
  }}} // namespace golos::plugins::mongo_db

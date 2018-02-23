@@ -2,7 +2,7 @@ find_package(libmongoc-1.0 1.8)
 
 if (libmongoc-1.0_FOUND)
 
-  # EOS has no direct dependencies on libmongoc but its shared libraries
+  # Golos has no direct dependencies on libmongoc but its shared libraries
   # will need to be present at runtime for the C++ libraries we use:
   # libbsoncxx & libmongocxx (both from github.com/mongodb/mongo-cxx-driver)
 
@@ -15,37 +15,39 @@ if (libmongoc-1.0_FOUND)
 
   find_package(libbsoncxx REQUIRED)
   message(STATUS "Found bsoncxx headers: ${LIBBSONCXX_INCLUDE_DIRS}")
-  find_library(EOS_LIBBSONCXX ${LIBBSONCXX_LIBRARIES}
+  find_library(GOLOS_LIBBSONCXX ${LIBBSONCXX_LIBRARIES}
                PATHS ${LIBBSONCXX_LIBRARY_DIRS} NO_DEFAULT_PATH)
-  message(STATUS "Found bsoncxx library: ${EOS_LIBBSONCXX}")
+  message(STATUS "Found bsoncxx library: ${GOLOS_LIBBSONCXX}")
 
   find_package(libmongocxx REQUIRED)
   message(STATUS "Found mongocxx headers: ${LIBMONGOCXX_INCLUDE_DIRS}")
-  find_library(EOS_LIBMONGOCXX ${LIBMONGOCXX_LIBRARIES}
+  find_library(GOLOS_LIBMONGOCXX ${LIBMONGOCXX_LIBRARIES}
                PATHS ${LIBMONGOCXX_LIBRARY_DIRS} NO_DEFAULT_PATH)
-  message(STATUS "Found mongocxx library: ${EOS_LIBMONGOCXX}")
+  message(STATUS "Found mongocxx library: ${GOLOS_LIBMONGOCXX}")
 
 
   set(CURRENT_TARGET mongo_db)
 
   list(APPEND CURRENT_TARGET_HEADERS
           include/golos/plugins/mongo_db/mongo_db_plugin.hpp
+          include/golos/plugins/mongo_db/mongo_db_writer.hpp
           )
 
   list(APPEND CURRENT_TARGET_SOURCES
           mongo_db_plugin.cpp
+          mongo_db_writer.cpp
           )
 
   if(BUILD_SHARED_LIBRARIES)
-      add_library(golos_${CURRENT_TARGET} SHARED
-              ${CURRENT_TARGET_HEADERS}
-              ${CURRENT_TARGET_SOURCES}
-              )
+    add_library(golos_${CURRENT_TARGET} SHARED
+            ${CURRENT_TARGET_HEADERS}
+            ${CURRENT_TARGET_SOURCES}
+            )
   else()
-      add_library(golos_${CURRENT_TARGET} STATIC
-              ${CURRENT_TARGET_HEADERS}
-              ${CURRENT_TARGET_SOURCES}
-              )
+    add_library(golos_${CURRENT_TARGET} STATIC
+            ${CURRENT_TARGET_HEADERS}
+            ${CURRENT_TARGET_SOURCES}
+            )
   endif()
 
   add_library(golos::${CURRENT_TARGET} ALIAS golos_${CURRENT_TARGET})
@@ -58,8 +60,10 @@ if (libmongoc-1.0_FOUND)
           golos::chain_plugin
           appbase
           fc
+          ${GOLOS_LIBBSONCXX}
+          ${GOLOS_LIBMONGOCXX}
   )
-  target_include_directories(golos_${CURRENT_TARGET} PUBLIC "include")
+  target_include_directories(golos_${CURRENT_TARGET} PUBLIC "include" ${LIBMONGOCXX_INCLUDE_DIRS} ${LIBBSONCXX_INCLUDE_DIRS})
 
   install(TARGETS
           golos_${CURRENT_TARGET}
@@ -68,6 +72,7 @@ if (libmongoc-1.0_FOUND)
           LIBRARY DESTINATION lib
           ARCHIVE DESTINATION lib
           )
+  install( FILES ${HEADERS} DESTINATION "include/golos/plugins/mongo_db" )
 else()
   message("Could NOT find MongoDB. mongo_db_plugin with MongoDB support will not be included.")
   # sudo apt-get install pkg-config libssl-dev libsasl2-dev
