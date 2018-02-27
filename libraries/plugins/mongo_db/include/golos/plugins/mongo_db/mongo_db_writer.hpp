@@ -3,10 +3,21 @@
 #include <bsoncxx/builder/basic/kvp.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
+#include <bsoncxx/builder/stream/array.hpp>
+#include <bsoncxx/builder/stream/value_context.hpp>
 #include <bsoncxx/json.hpp>
 
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
+#include <mongocxx/stdx.hpp>
+#include <mongocxx/uri.hpp>
+
+using bsoncxx::builder::stream::close_array;
+using bsoncxx::builder::stream::close_document;
+using bsoncxx::builder::stream::document;
+using bsoncxx::builder::stream::finalize;
+using bsoncxx::builder::stream::open_array;
+using bsoncxx::builder::stream::open_document;
 
 #include <golos/protocol/block.hpp>
 
@@ -18,8 +29,10 @@ namespace mongo_db {
 
     class mongo_db_writer final {
     public:
-        mongo_db_writer(const std::string& uri_str);
+        mongo_db_writer();
         ~mongo_db_writer();
+
+        bool initialize(const std::string& uri_str);
 
         void on_block(const signed_block& block);
 

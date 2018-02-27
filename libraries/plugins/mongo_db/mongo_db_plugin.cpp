@@ -15,8 +15,8 @@ namespace mongo_db {
     public:
         mongo_db_plugin_impl(mongo_db_plugin &plugin, const std::string& uri_str)
                 : _my(plugin),
-                  _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()),
-                  writer(uri_str) {
+                  _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
+            writer.initialize(uri_str);
         }
 
         ~mongo_db_plugin_impl() = default;
@@ -34,13 +34,12 @@ namespace mongo_db {
     };
 
     void mongo_db_plugin::mongo_db_plugin_impl::on_block(const signed_block &block) {
-        ilog("mongo_db plugin: on_block");
-
-
+        writer.on_block(block);
     }
 
     // Plugin
     mongo_db_plugin::mongo_db_plugin() {
+        ilog("mongo_db plugin: ctor");
     }
 
     mongo_db_plugin::~mongo_db_plugin() {
@@ -74,8 +73,8 @@ namespace mongo_db {
                 });
 
             } else {
-                wlog("golos::mongo_db_plugin configured, but no --mongodb-uri specified.");
-                wlog("mongo_db_plugin disabled.");
+                ilog("mongo_db_plugin configured, but no --mongodb-uri specified.");
+                ilog("mongo_db_plugin disabled.");
             }
 
             ilog("mongo_db plugin: plugin_initialize() end");
