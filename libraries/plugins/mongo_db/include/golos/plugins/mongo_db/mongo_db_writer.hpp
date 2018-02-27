@@ -29,10 +29,10 @@ namespace mongo_db {
 
     class mongo_db_writer final {
     public:
-        mongo_db_writer();
-        ~mongo_db_writer();
+        mongo_db_writer() = default;
+        ~mongo_db_writer() = default;
 
-        bool initialize(const std::string& uri_str);
+        void initialize(const std::string& uri_str);
 
         void on_block(const signed_block& block);
 
@@ -45,6 +45,7 @@ namespace mongo_db {
         static const std::string trans_col;
 
         mongocxx::instance mongo_inst;
+        mongocxx::uri uri;
         mongocxx::client mongo_conn;
     };
 }}}

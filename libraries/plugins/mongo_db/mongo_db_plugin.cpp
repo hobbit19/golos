@@ -39,17 +39,19 @@ namespace mongo_db {
 
     // Plugin
     mongo_db_plugin::mongo_db_plugin() {
-        ilog("mongo_db plugin: ctor");
     }
 
     mongo_db_plugin::~mongo_db_plugin() {
-
     }
 
     void mongo_db_plugin::set_program_options(
             boost::program_options::options_description &cli,
             boost::program_options::options_description &cfg) {
-
+        cli.add_options()
+                ("mongodb-uri",
+                 boost::program_options::value<string>()->default_value("mongodb://127.0.0.1:27017"),
+                "Mongo DB connection string");
+        cfg.add(cli);
     }
 
     void mongo_db_plugin::plugin_initialize(const boost::program_options::variables_map &options) {
@@ -58,8 +60,6 @@ namespace mongo_db {
 
             // First init mongo db
             if (options.count("mongodb-uri")) {
-                ilog("initializing mongo_db_plugin");
-
                 std::string uri_str = options.at("mongodb-uri").as<std::string>();
                 ilog("connecting to ${u}", ("u", uri_str));
 
