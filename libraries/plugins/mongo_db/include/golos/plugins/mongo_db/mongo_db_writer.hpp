@@ -1,4 +1,5 @@
 #pragma once
+#include <golos/protocol/block.hpp>
 
 #include <bsoncxx/builder/basic/kvp.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
@@ -19,7 +20,6 @@ using bsoncxx::builder::stream::finalize;
 using bsoncxx::builder::stream::open_array;
 using bsoncxx::builder::stream::open_document;
 
-#include <golos/protocol/block.hpp>
 
 namespace golos {
 namespace plugins {

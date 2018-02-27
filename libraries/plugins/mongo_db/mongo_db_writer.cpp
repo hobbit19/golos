@@ -23,8 +23,7 @@ namespace mongo_db {
             ilog("MongoDB plugin initialized.");
         }
         catch (mongocxx::exception & ex) {
-            ilog(ex.what());
-            throw;
+            ilog("Exception in MongoDB ctor: ${p}", ("p", ex.what()));
         }
     }
 
@@ -33,11 +32,12 @@ namespace mongo_db {
             auto blocks = mongo_conn[db_name][blocks_col]; // Blocks
 
             auto doc = document {};
-            doc << "block_num" << std::to_string(block.block_num())
-                << "block_id" << block.id().str()
-                << "prev_block_id" << block.previous.str()
-                << "merkle_root" << block.transaction_merkle_root.str()
-                << "created_at" << fc::time_point::now();
+            doc << "block_num"      << std::to_string(block.block_num())
+                << "block_id"       << block.id().str()
+                << "prev_block_id"  << block.previous.str()
+                << "timestamp"      << block.timestamp
+                << "witness"        << block.witness
+                << "created_at"     << fc::time_point::now();
 
             if (!block.transactions.empty()) {
                 auto in_array = doc << trans_col << open_array;
@@ -47,10 +47,10 @@ namespace mongo_db {
                     ++trx_num;
 
                     in_array << open_document
-                             << "id" << trx.id().str()
-                             << "sequence_num" << std::to_string(trx_num)
+                             << "id"            << trx.id().str()
+                             << "sequence_num"  << std::to_string(trx_num)
                              << "ref_block_num" << std::to_string(trx.ref_block_num)
-                             << "expiration" << fc::time_point::now()
+                             << "expiration"    << fc::time_point::now()
                              << close_document;
                 }
                 in_array << close_array;
@@ -63,8 +63,7 @@ namespace mongo_db {
             ++processed_blocks;
         }
         catch (mongocxx::exception & ex) {
-            ilog(ex.what());
-            throw;
+            ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
         }
     }
 
