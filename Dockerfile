@@ -29,9 +29,9 @@ RUN \
         python3-pip \
         wget \
     && \
-    wget https://github.com/mongodb/mongo-c-driver/releases/download/1.8.0/mongo-c-driver-1.8.0.tar.gz && \
-    tar xzf mongo-c-driver-1.8.0.tar.gz && \
-    cd mongo-c-driver-1.8.0 && \
+    wget https://github.com/mongodb/mongo-c-driver/releases/download/1.9.3/mongo-c-driver-1.9.3.tar.gz && \
+    tar xzf mongo-c-driver-1.9.3.tar.gz && \
+    cd mongo-c-driver-1.9.3 && \
     ./configure --disable-automatic-init-and-cleanup --enable-static && \
     make && \
     make install && \
