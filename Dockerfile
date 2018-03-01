@@ -19,6 +19,7 @@ RUN \
         libboost-all-dev \
         libreadline-dev \
         libssl-dev \
+        libsasl2-dev \
         libtool \
         ncurses-dev \
         pbzip2 \
@@ -26,7 +27,20 @@ RUN \
         python3 \
         python3-dev \
         python3-pip \
+        wget \
     && \
+    wget https://github.com/mongodb/mongo-c-driver/releases/download/1.9.3/mongo-c-driver-1.9.3.tar.gz && \
+    tar xzf mongo-c-driver-1.9.3.tar.gz && \
+    cd mongo-c-driver-1.9.3 && \
+    ./configure --disable-automatic-init-and-cleanup --enable-static && \
+    make && \
+    make install && \
+    git clone https://github.com/mongodb/mongo-cxx-driver.git --branch releases/stable --depth 1 && \
+    cd mongo-cxx-driver/build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make EP_mnmlstc_core && \
+    make && \
+    make install && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
     pip3 install gcovr
