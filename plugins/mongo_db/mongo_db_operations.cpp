@@ -12,14 +12,21 @@ namespace mongo_db {
     using bsoncxx::builder::basic::kvp;
     using bsoncxx::builder::stream::document;
 
+    // Helper functions
     document format_authority(const authority& auth) {
         array account_auths_arr;
         for (auto iter : auth.account_auths) {
-            account_auths_arr << iter;
+            document temp;
+            temp << "public_key_type" << (std::string)iter.first
+                 << "weight_type" << std::to_string(iter.second);
+            account_auths_arr << temp;
         }
         array key_auths_arr;
         for (auto iter : auth.key_auths) {
-            key_auths_arr << iter;
+            document temp;
+            temp << "public_key_type" << (std::string)iter.first
+                 << "weight_type" << std::to_string(iter.second);
+            key_auths_arr << temp;
         }
 
         document authority_doc;
@@ -27,6 +34,8 @@ namespace mongo_db {
                       << "weight_threshold" << std::to_string(auth.weight_threshold);
         authority_doc << "account_auths" << account_auths_arr;
         authority_doc << "key_auths" << key_auths_arr;
+
+        return authority_doc;
     }
 
     document format_chain_properties(const chain_properties& props) {
@@ -36,6 +45,16 @@ namespace mongo_db {
                   << "sbd_interest_rate" << std::to_string(props.sbd_interest_rate);
         return props_doc;
     }
+
+    std::string to_string(const signature_type& signature) {
+        std::string retVal;
+
+        for (auto iter : signature) {
+            retVal += iter;
+        }
+        return retVal;
+    }
+    /////////////////////////////////////////////////
 
 
     document write_operation(const operation& op) {
@@ -166,50 +185,13 @@ namespace mongo_db {
         document retval;
         document body;
 
-        array key_auths;
-        for (auto it: op.owner.key_auths) {
-            key_auths << (std::string)it.first;
-            key_auths << std::to_string(it.second);
-        }
-
-        array acct_auths;
-        for (auto it: op.owner.account_auths) {
-            acct_auths << it.first;
-            acct_auths << std::to_string(it.second);
-        }
-
-        document owner_doc;
-        owner_doc << "account_auths" << acct_auths;
-        owner_doc << "key_auths" << key_auths;
-        owner_doc << "weight_threshold" << std::to_string(op.owner.weight_threshold);
-
-
-        array posting_key_auths;
-        for (auto it: op.posting.key_auths) {
-            posting_key_auths << (std::string)it.first;
-            posting_key_auths << std::to_string(it.second);
-        }
-
-        array posting_acct_auths;
-        for (auto it: op.posting.account_auths) {
-            posting_acct_auths << it.first;
-            posting_acct_auths << std::to_string(it.second);
-        }
-
-        document posting_owner_doc;
-        posting_owner_doc << "account_auths" << posting_acct_auths;
-        posting_owner_doc << "key_auths" << posting_key_auths;
-        posting_owner_doc << "weight_threshold" << std::to_string(op.owner.weight_threshold);
-
-
         body << "fee"  << op.fee.to_string()
              << "creator" << op.creator
              << "new_account_name" << op.new_account_name;
-        body << "owner" << owner_doc;
+        body << "owner" << format_authority(op.owner);
         body << "json_metadata" << op.json_metadata
              << "memo_key" << (std::string)op.memo_key;
-        body << "posting" << posting_owner_doc;
-
+        body << "posting" << format_authority(op.posting);
 
         retval << "account_create" << body;
 
@@ -221,63 +203,17 @@ namespace mongo_db {
 
         document owner_doc;
         if (op.owner) {
-            array key_auths;
-            for (auto it: op.owner->key_auths) {
-                key_auths << (std::string)it.first;
-                key_auths << std::to_string(it.second);
-            }
-
-            array acct_auths;
-            for (auto it: op.owner->account_auths) {
-                acct_auths << (std::string)it.first;
-                acct_auths << std::to_string(it.second);
-            }
-
-
-            owner_doc << "account_auths" << acct_auths;
-            owner_doc << "key_auths" << key_auths;
-            owner_doc << "weight_threshold" << std::to_string(op.owner->weight_threshold);
+            owner_doc = format_authority(*op.owner);
         }
-
 
         document posting_owner_doc;
         if (op.posting) {
-
-            array posting_key_auths;
-            for (auto it: op.posting->key_auths) {
-                posting_key_auths << (std::string)it.first;
-                posting_key_auths << std::to_string(it.second);
-            }
-
-            array posting_acct_auths;
-            for (auto it: op.posting->account_auths) {
-                posting_acct_auths << (std::string)it.first;
-                posting_acct_auths << std::to_string(it.second);
-            }
-
-            posting_owner_doc << "account_auths" <<  posting_acct_auths;
-            posting_owner_doc << "key_auths" << posting_key_auths;
-            posting_owner_doc << "weight_threshold" << std::to_string(op.owner->weight_threshold);
+            owner_doc = format_authority(*op.posting);
         }
 
         document active_owner_doc;
         if (op.active) {
-
-            array active_key_auths;
-            for (auto it: op.active->key_auths) {
-                active_key_auths << (std::string)it.first;
-                active_key_auths << std::to_string(it.second);
-            }
-
-            array active_acct_auths;
-            for (auto it: op.active->account_auths) {
-                active_acct_auths << (std::string)it.first;
-                active_acct_auths << std::to_string(it.second);
-            }
-
-            active_owner_doc << "account_auths" << active_acct_auths;
-            active_owner_doc << "key_auths" << active_key_auths;
-            active_owner_doc << "weight_threshold" << std::to_string(op.active->weight_threshold);
+            owner_doc = format_authority(*op.active);
         }
 
 
@@ -343,15 +279,19 @@ namespace mongo_db {
         document retval;
         document body;
 
-        document props_doc;
-        props_doc << "account_creation_fee" << op.props.account_creation_fee.to_string()
-                  << "maximum_block_size" << std::to_string(op.props.maximum_block_size)
-                  << "sbd_interest_rate" << std::to_string(op.props.sbd_interest_rate);
+        document pow_doc;
+        pow_doc << "worker" << (std::string)op.work.worker
+                << "input" << op.work.input
+                << "signature" << to_string(op.work.signature)
+                << "work" << op.work.work;
 
+        body << "block_id" << op.block_id.str()
+             << "worker_account" << op.worker_account
+             << "nonce" << std::to_string(op.nonce);
+        body << "props" << format_chain_properties(op.props);
+        body << "work" << pow_doc;
 
-
-
-
+        retval << "pow" << body;
 
         return retval;
     }
@@ -363,9 +303,8 @@ namespace mongo_db {
         for (auto iter : op.required_auths) {
             auths << iter;
         }
-        body << "id" << std::to_string(op.id)
-             << "required_auths";
-        body << auths;
+        body << "id" << std::to_string(op.id);
+        body << "required_auths" << auths;
 
         retval << "custom" << body;
 
@@ -376,12 +315,12 @@ namespace mongo_db {
         document body;
 
         document doc1;
-        doc1 << "id" << op.first_block.id()
+        doc1 << "id" << op.first_block.id().str()
              << "timestamp" << op.first_block.timestamp
              << "witness" << op.first_block.witness;
 
         document doc2;
-        doc2 << "id" << op.second_block.id()
+        doc2 << "id" << op.second_block.id().str()
              << "timestamp" << op.second_block.timestamp
              << "witness" << op.second_block.witness;
 
@@ -581,33 +520,300 @@ namespace mongo_db {
 
         body << "props" << format_chain_properties(op.props);
         if (op.new_owner_key) {
-            body << "new_owner_key" << *op.new_owner_key;
+            body << "new_owner_key" << (std::string)(*op.new_owner_key);
         }
 
         retval << "pow2" << body;
 
         return retval;
     }
-    document write_operation(const escrow_approve_operation& op);
-    document write_operation(const transfer_to_savings_operation& op);
-    document write_operation(const transfer_from_savings_operation& op);
-    document write_operation(const cancel_transfer_from_savings_operation& op);
-    document write_operation(const custom_binary_operation& op);
-    document write_operation(const decline_voting_rights_operation& op);
-    document write_operation(const reset_account_operation& op);
-    document write_operation(const set_reset_account_operation& op);
-    document write_operation(const fill_convert_request_operation& op);
-    document write_operation(const author_reward_operation& op);
-    document write_operation(const curation_reward_operation& op);
-    document write_operation(const comment_reward_operation& op);
-    document write_operation(const liquidity_reward_operation& op);
-    document write_operation(const interest_operation& op);
-    document write_operation(const fill_vesting_withdraw_operation& op);
-    document write_operation(const fill_order_operation& op);
-    document write_operation(const shutdown_witness_operation& op);
-    document write_operation(const fill_transfer_from_savings_operation& op);
-    document write_operation(const hardfork_operation& op);
-    document write_operation(const comment_payout_update_operation& op);
+
+    document write_operation(const escrow_approve_operation& op) {
+        document retval;
+        document body;
+
+        body << "from" << op.from
+             << "to" << op.to
+             << "agent" << op.agent
+             << "who" << op.who
+             << "escrow_id" << std::to_string(op.escrow_id)
+             << "approve" << (op.approve ? std::string("true") : std::string("false"));
+
+        retval << "escrow_approve" << body;
+
+        return retval;
+    }
+
+    document write_operation(const transfer_to_savings_operation& op){
+        document retval;
+        document body;
+
+        body << "from" << op.from
+             << "to" << op.to
+             << "amount" << op.amount.to_string()
+             << "memo" << op.memo;
+
+        retval << "transfer_to_savings" << body;
+
+        return retval;
+    }
+
+    document write_operation(const transfer_from_savings_operation& op) {
+        document retval;
+        document body;
+
+        body << "from" << op.from
+             << "to" << op.to
+             << "amount" << op.amount.to_string()
+             << "memo" << op.memo
+             << "request_id" << std::to_string(op.request_id);
+
+        retval << "transfer_from_savings" << body;
+
+        return retval;
+    }
+    document write_operation(const cancel_transfer_from_savings_operation& op) {
+        document retval;
+        document body;
+
+        body << "from" << op.from
+             << "request_id" << std::to_string(op.request_id);
+
+        retval << "cancel_transfer_from_savings" << body;
+
+        return retval;
+    }
+
+    document write_operation(const custom_binary_operation& op){
+        document retval;
+        document body;
+
+        array required_owner_auths_arr;
+        for (auto iter : op.required_owner_auths) {
+            required_owner_auths_arr << iter;
+        }
+
+        array required_active_auths_arr;
+        for (auto iter : op.required_active_auths) {
+            required_active_auths_arr << iter;
+        }
+
+        array required_posting_auths_arr;
+        for (auto iter : op.required_posting_auths) {
+            required_posting_auths_arr << iter;
+        }
+
+        array auths;
+        for (auto iter : op.required_auths) {
+            auths << format_authority(iter);
+        }
+
+        body << "id" << op.id;
+        body << "required_owner_auths" << required_owner_auths_arr;
+        body << "required_active_auths" << required_active_auths_arr;
+        body << "required_posting_auths" << required_posting_auths_arr;
+        body << "required_auths" << auths;
+
+        retval << "custom_binary" << body;
+
+        return retval;
+    }
+
+    document write_operation(const decline_voting_rights_operation& op) {
+        document retval;
+        document body;
+
+        body << "account" << op.account
+             << "decline" << (op.decline ? std::string("true") : std::string("false"));
+
+        retval << "decline_voting_rights" << body;
+
+        return retval;
+    }
+
+    document write_operation(const reset_account_operation& op){
+        document retval;
+        document body;
+
+        body << "reset_account" << op.reset_account
+             << "account_to_reset" << op.account_to_reset;
+        body << "new_owner_authority" << format_authority(op.new_owner_authority);
+
+        retval << "reset_account" << body;
+
+        return retval;
+    }
+
+    document write_operation(const set_reset_account_operation& op){
+        document retval;
+        document body;
+
+        body << "account" << op.account
+             << "current_reset_account" << op.current_reset_account
+             << "reset_account" << op.reset_account;
+
+        retval << "set_reset_account" << body;
+
+        return retval;
+    }
+
+    document write_operation(const fill_convert_request_operation& op) {
+        document retval;
+        document body;
+
+        body << "owner" << op.owner
+             << "requestid" << std::to_string(op.requestid)
+             << "amount_in" << op.amount_in.to_string()
+             << "amount_out" << op.amount_out.to_string();
+
+        retval << "fill_convert_request" << body;
+
+        return retval;
+    }
+
+    document write_operation(const author_reward_operation& op)  {
+        document retval;
+        document body;
+
+        body << "author" << op.author
+             << "permlink" << op.permlink
+             << "sbd_payout" << op.sbd_payout.to_string()
+             << "steem_payout" << op.steem_payout.to_string()
+             << "vesting_payout" << op.vesting_payout.to_string();
+
+        retval << "author_reward" << body;
+
+        return retval;
+    }
+
+    document write_operation(const curation_reward_operation& op){
+        document retval;
+        document body;
+
+        body << "curator" << op.curator
+             << "reward" << op.reward.to_string()
+             << "comment_author" << op.comment_author
+             << "comment_permlink" << op.comment_permlink;
+
+        retval << "curation_reward" << body;
+
+        return retval;
+    }
+
+    document write_operation(const comment_reward_operation& op){
+        document retval;
+        document body;
+
+        body << "author" << op.author
+             << "permlink" << op.permlink
+             << "payout" << op.payout.to_string();
+
+        retval << "comment_reward" << body;
+
+        return retval;
+    }
+
+    document write_operation(const liquidity_reward_operation& op){
+        document retval;
+        document body;
+
+        body << "owner" << op.owner
+             << "payout" << op.payout.to_string();
+
+        retval << "liquidity_reward" << body;
+
+        return retval;
+    }
+
+    document write_operation(const interest_operation& op){
+        document retval;
+        document body;
+
+        body << "owner" << op.owner
+             << "interest" << op.interest.to_string();
+
+        retval << "interest" << body;
+
+        return retval;
+    }
+
+    document write_operation(const fill_vesting_withdraw_operation& op) {
+        document retval;
+        document body;
+
+        body << "from_account" << op.from_account
+             << "to_account" << op.to_account
+             << "withdrawn" << op.withdrawn.to_string()
+             << "deposited" << op.deposited.to_string();
+
+        retval << "fill_vesting_withdraw" << body;
+
+        return retval;
+    }
+
+    document write_operation(const fill_order_operation& op) {
+        document retval;
+        document body;
+
+        body << "current_owner" << op.current_owner
+             << "current_orderid" << std::to_string(op.current_orderid)
+             << "current_pays" << op.current_pays.to_string()
+             << "open_owner" << op.open_owner
+             << "open_orderid" << std::to_string(op.open_orderid)
+             << "open_pays" << op.open_pays.to_string();
+
+        retval << "fill_order" << body;
+
+        return retval;
+    }
+
+    document write_operation(const shutdown_witness_operation& op){
+        document retval;
+        document body;
+
+        body << "owner" << op.owner;
+
+        retval << "shutdown_witness" << body;
+
+        return retval;
+    }
+
+    document write_operation(const fill_transfer_from_savings_operation& op){
+        document retval;
+        document body;
+
+        body << "from" << op.from
+             << "to" << op.to
+             << "amount" << op.amount.to_string()
+             << "request_id" << std::to_string(op.request_id)
+             << "memo" << op.memo;
+
+        retval << "fill_transfer_from_savings" << body;
+
+        return retval;
+    }
+
+    document write_operation(const hardfork_operation& op) {
+        document retval;
+        document body;
+
+        body << "hardfork_id" << std::to_string(op.hardfork_id);
+
+        retval << "hardfork" << body;
+
+        return retval;
+    }
+
+    document write_operation(const comment_payout_update_operation& op){
+        document retval;
+        document body;
+
+        body << "author" << op.author
+             << "permlink" << op.permlink;
+
+        retval << "comment_payout_update" << body;
+
+        return retval;
+    }
 
 }}}
-
