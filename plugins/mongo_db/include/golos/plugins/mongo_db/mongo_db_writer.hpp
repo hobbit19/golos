@@ -1,6 +1,7 @@
 #pragma once
 #include <golos/protocol/block.hpp>
 #include <golos/chain/database.hpp>
+#include <golos/protocol/transaction.hpp>
 
 #include <bsoncxx/builder/basic/kvp.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
@@ -30,6 +31,7 @@ namespace plugins {
 namespace mongo_db {
 
     using golos::protocol::signed_block;
+    using golos::protocol::signed_transaction;
 
     class mongo_db_writer final {
     public:
@@ -44,6 +46,7 @@ namespace mongo_db {
 
         void write_blocks();
         void write_block(const signed_block& block, mongocxx::bulk_write& _bulk);
+        document write_transaction(const signed_transaction& tran);
 
         size_t processed_blocks = 0;
 

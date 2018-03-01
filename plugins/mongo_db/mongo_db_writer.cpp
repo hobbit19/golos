@@ -1,9 +1,14 @@
 #include <golos/plugins/mongo_db/mongo_db_writer.hpp>
+#include <golos/plugins/mongo_db/mongo_db_operations.hpp>
+#include <golos/plugins/chain/plugin.hpp>
+#include <golos/protocol/operations.hpp>
+
 #include <fc/log/logger.hpp>
 #include <appbase/application.hpp>
-#include <golos/plugins/chain/plugin.hpp>
 
 #include <mongocxx/exception/exception.hpp>
+#include <bsoncxx/array/element.hpp>
+#include <bsoncxx/builder/stream/array.hpp>
 
 
 namespace golos {
@@ -12,6 +17,7 @@ namespace mongo_db {
 
     using namespace bsoncxx::types;
     using namespace bsoncxx::builder;
+    using bsoncxx::builder::stream::array;
     using bsoncxx::builder::basic::kvp;
 
     const std::string mongo_db_writer::blocks_table = "Blocks";
@@ -82,24 +88,38 @@ namespace mongo_db {
             << "witness"        << block.witness
             << "created_at"     << fc::time_point::now();
 
+        array tran_arr;
         if (!block.transactions.empty()) {
-            auto in_array = doc << "Transactions" << open_array;
 
             int trx_num = -1;
             for (const auto& trx : block.transactions) {
                 ++trx_num;
 
-                in_array << open_document
-                         << "id"            << trx.id().str()
-                         << "sequence_num"  << std::to_string(trx_num)
-                         << "ref_block_num" << std::to_string(trx.ref_block_num)
-                         << "expiration"    << fc::time_point::now()
-                         << close_document;
+                tran_arr << write_transaction(trx);
             }
-            in_array << close_array;
         }
+        doc << "Transactions" << tran_arr;
 
         mongocxx::model::insert_one insert_msg{doc.view()};
         _bulk.append(insert_msg);
+    }
+
+    document mongo_db_writer::write_transaction(const signed_transaction& tran) {
+
+        document doc;
+        doc << "id"             << tran.id().str()
+            << "ref_block_num"  << std::to_string(tran.ref_block_num)
+            << "expiration"     << fc::time_point::now();
+
+        array oper_arr;
+        if (!tran.operations.empty()) {
+
+            for (const auto& op : tran.operations) {
+                oper_arr << write_operation(op);
+            }
+        }
+        doc << "Operations" << oper_arr;
+
+        return doc;
     }
 }}}
