@@ -27,6 +27,7 @@ RUN \
         python3 \
         python3-dev \
         python3-pip \
+        wget \
     && \
     wget https://github.com/mongodb/mongo-c-driver/releases/download/1.8.0/mongo-c-driver-1.8.0.tar.gz && \
     tar xzf mongo-c-driver-1.8.0.tar.gz && \
