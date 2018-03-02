@@ -16,7 +16,6 @@ namespace mongo_db {
 
         APPBASE_PLUGIN_REQUIRES(
                 (chain::plugin)
-                (json_rpc::plugin)
         )
 
         mongo_db_plugin();

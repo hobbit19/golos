@@ -20,8 +20,9 @@ namespace mongo_db {
     using bsoncxx::builder::stream::array;
     using bsoncxx::builder::basic::kvp;
 
-    const std::string mongo_db_writer::blocks_table = "Blocks";
-    const std::string mongo_db_writer::trans_table = "Transactions";
+    const std::string mongo_db_writer::blocks = "Blocks";
+    const std::string mongo_db_writer::transactions = "Transactions";
+    const std::string mongo_db_writer::operations = "Operations";
 
     mongo_db_writer::mongo_db_writer() :
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
@@ -45,6 +46,7 @@ namespace mongo_db {
 
             _blocks[block.block_num()] = block;
 
+            // Update last irreversible block number
             last_irreversible_block_num = _db.last_non_undoable_block_num();
             if (last_irreversible_block_num >= _blocks.begin()->first) {
                 // Having irreversible blocks. Writing em into Mongo.
@@ -71,9 +73,9 @@ namespace mongo_db {
             _blocks.erase(head_iter);
         }
 
-        auto blocks = mongo_conn[db_name][blocks_table]; // Blocks
+        auto blocks_table = mongo_conn[db_name][blocks]; // Blocks
 
-        if (!blocks.bulk_write(_bulk)) {
+        if (!blocks_table.bulk_write(_bulk)) {
             ilog("Failed to write blocks to Mongo DB");
         }
     }
@@ -81,6 +83,7 @@ namespace mongo_db {
     void mongo_db_writer::write_block(const signed_block& block, mongocxx::bulk_write& _bulk) {
 
         auto doc = document {};
+        // First write some general information from Block
         doc << "block_num"      << std::to_string(block.block_num())
             << "block_id"       << block.id().str()
             << "prev_block_id"  << block.previous.str()
@@ -90,15 +93,12 @@ namespace mongo_db {
 
         array tran_arr;
         if (!block.transactions.empty()) {
-
-            int trx_num = -1;
+            // Now write every transaction from Block
             for (const auto& trx : block.transactions) {
-                ++trx_num;
-
                 tran_arr << write_transaction(trx);
             }
+            doc << transactions << tran_arr;
         }
-        doc << "Transactions" << tran_arr;
 
         mongocxx::model::insert_one insert_msg{doc.view()};
         _bulk.append(insert_msg);
@@ -106,6 +106,7 @@ namespace mongo_db {
 
     document mongo_db_writer::write_transaction(const signed_transaction& tran) {
 
+        // Write transaction general information
         document doc;
         doc << "id"             << tran.id().str()
             << "ref_block_num"  << std::to_string(tran.ref_block_num)
@@ -113,12 +114,16 @@ namespace mongo_db {
 
         array oper_arr;
         if (!tran.operations.empty()) {
-
+            // Write every operation in transaction
             for (const auto& op : tran.operations) {
-                oper_arr << write_operation(op);
+
+                operation_writer op_writer;
+                op.visit(op_writer);
+
+                oper_arr << op_writer.get_document();
             }
+            doc << operations << oper_arr;
         }
-        doc << "Operations" << oper_arr;
 
         return doc;
     }

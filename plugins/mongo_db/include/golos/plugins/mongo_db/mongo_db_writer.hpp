@@ -3,27 +3,16 @@
 #include <golos/chain/database.hpp>
 #include <golos/protocol/transaction.hpp>
 
-#include <bsoncxx/builder/basic/kvp.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/builder/stream/array.hpp>
 #include <bsoncxx/builder/stream/value_context.hpp>
-#include <bsoncxx/json.hpp>
 
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
-#include <mongocxx/stdx.hpp>
 #include <mongocxx/uri.hpp>
 
 #include <map>
-
-
-using bsoncxx::builder::stream::close_array;
-using bsoncxx::builder::stream::close_document;
-using bsoncxx::builder::stream::document;
-using bsoncxx::builder::stream::finalize;
-using bsoncxx::builder::stream::open_array;
-using bsoncxx::builder::stream::open_document;
 
 
 namespace golos {
@@ -32,6 +21,8 @@ namespace mongo_db {
 
     using golos::protocol::signed_block;
     using golos::protocol::signed_transaction;
+    using bsoncxx::builder::stream::document;
+    using bsoncxx::builder::stream::open_document;
 
     class mongo_db_writer final {
     public:
@@ -51,8 +42,9 @@ namespace mongo_db {
         size_t processed_blocks = 0;
 
         std::string db_name;
-        static const std::string blocks_table;
-        static const std::string trans_table;
+        static const std::string blocks;
+        static const std::string transactions;
+        static const std::string operations;
 
         // Key = Block num, Value = block
         uint32_t last_irreversible_block_num;
