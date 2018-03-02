@@ -14,18 +14,8 @@ if (libmongoc-1.0_FOUND)
   # mongo-cxx-driver libraries libmongocxx and libbsoncxx.
 
   find_package(libbsoncxx REQUIRED)
-  message(STATUS "Found bsoncxx headers: ${LIBBSONCXX_INCLUDE_DIRS}")
-  message(STATUS "Searching for bsoncxx library ${LIBBSONCXX_LIBRARIES} in ${LIBBSONCXX_LIBRARY_DIRS}")
-  find_library(GOLOS_LIBBSONCXX ${LIBBSONCXX_LIBRARIES}
-               PATHS ${LIBBSONCXX_LIBRARY_DIRS} NO_DEFAULT_PATH)
-  message(STATUS "Found bsoncxx library: ${GOLOS_LIBBSONCXX}")
-
   find_package(libmongocxx REQUIRED)
-  message(STATUS "Found mongocxx headers: ${LIBMONGOCXX_INCLUDE_DIRS}")
-  message(STATUS "Searching for mongocxx librariy ${LIBMONGOCXX_LIBRARIES} in ${LIBMONGOCXX_LIBRARY_DIRS}")
-  find_library(GOLOS_LIBMONGOCXX ${LIBMONGOCXX_LIBRARIES}
-               PATHS ${LIBMONGOCXX_LIBRARY_DIRS} NO_DEFAULT_PATH)
-  message(STATUS "Found mongocxx library: ${GOLOS_LIBMONGOCXX}")
+
 
   set(CURRENT_TARGET mongo_db)
 
@@ -63,8 +53,8 @@ if (libmongoc-1.0_FOUND)
           golos::chain_plugin
           appbase
           fc
-          ${GOLOS_LIBBSONCXX}
-          ${GOLOS_LIBMONGOCXX}
+          ${LIBBSONCXX_LIBRARIES}
+          ${LIBMONGOCXX_LIBRARIES}
   )
   target_include_directories(golos_${CURRENT_TARGET} PUBLIC "include" ${LIBMONGOCXX_INCLUDE_DIRS} ${LIBBSONCXX_INCLUDE_DIRS})
 
