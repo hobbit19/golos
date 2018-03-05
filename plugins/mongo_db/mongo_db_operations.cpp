@@ -45,6 +45,13 @@ namespace mongo_db {
         return props_doc;
     }
 
+    document format_asset(const asset& _asset) {
+        document asset_doc;
+        asset_doc << "amount" << std::to_string(_asset.to_real())
+                  << "symbol_name" << _asset.symbol_name();
+        return asset_doc;
+    }
+
     std::string to_string(const signature_type& signature) {
         std::string retVal;
 
@@ -87,8 +94,8 @@ namespace mongo_db {
         document body;
 
         body << "from"  << op.from
-             << "to" << op.to
-             << "amount" << op.amount.to_string()
+             << "to" << op.to;
+        body << "amount" << format_asset(op.amount)
              << "memo" << op.memo;
 
         data << "transfer" << body;
@@ -98,8 +105,8 @@ namespace mongo_db {
         document body;
 
         body << "from"  << op.from
-             << "to" << op.to
-             << "amount" << op.amount.to_string();
+             << "to" << op.to;
+        body << "amount" << format_asset(op.amount);
 
         data << "transfer_to_vesting" << body;
     }
@@ -107,8 +114,8 @@ namespace mongo_db {
     void operation_writer::operator()(const withdraw_vesting_operation &op) {
         document body;
 
-        body << "account"  << op.account
-             << "vesting_shares" << op.vesting_shares.to_string();
+        body << "account"  << op.account;
+        body << "vesting_shares" << format_asset(op.vesting_shares);
 
         data << "withdraw_vesting" << body;
     }
@@ -117,10 +124,10 @@ namespace mongo_db {
         document body;
 
         body << "owner"  << op.owner
-             << "orderid" << std::to_string(op.orderid)
-             << "amount_to_sell" << op.amount_to_sell.to_string()
-             << "min_to_receive" << op.min_to_receive.to_string()
-             << "expiration" << op.expiration;
+             << "orderid" << std::to_string(op.orderid);
+        body << "amount_to_sell" << format_asset(op.amount_to_sell);
+        body << "min_to_receive" << format_asset(op.min_to_receive);
+        body << "expiration" << op.expiration;
 
         body << "limit_order_create" << body;
     }
@@ -147,8 +154,8 @@ namespace mongo_db {
         document body;
 
         body << "owner"  << op.owner
-             << "requestid" << std::to_string(op.requestid)
-             << "amount" << op.amount.to_string();
+             << "requestid" << std::to_string(op.requestid);
+        body << "amount" << format_asset(op.amount);
 
         data << "convert" << body;
     }
@@ -394,11 +401,11 @@ namespace mongo_db {
         body << "from" << op.from
              << "to" << op.to
              << "agent" << op.agent
-             << "escrow_id" << std::to_string(op.escrow_id)
-             << "sbd_amount" << op.sbd_amount.to_string()
-             << "steem_amount " << op.steem_amount.to_string()
-             << "fee" << op.fee.to_string()
-             << "json_meta" << op.json_meta;
+             << "escrow_id" << std::to_string(op.escrow_id);
+        body << "sbd_amount" << format_asset(op.sbd_amount);
+        body << "steem_amount " << format_asset(op.steem_amount);
+        body << "fee" << format_asset(op.fee);
+        body << "json_meta" << op.json_meta;
 
         data << "escrow_transfer" << body;
     }
@@ -423,9 +430,9 @@ namespace mongo_db {
              << "agent" << op.agent
              << "who" << op.who
              << "receiver" << op.receiver
-             << "escrow_id" << std::to_string(op.escrow_id)
-             << "sbd_amount" << op.sbd_amount.to_string()
-             << "steem_amount" << op.steem_amount.to_string();
+             << "escrow_id" << std::to_string(op.escrow_id);
+        body << "sbd_amount" << format_asset(op.sbd_amount);
+        body << "steem_amount" << format_asset(op.steem_amount);
 
         data << "escrow_release" << body;
     }
@@ -458,9 +465,9 @@ namespace mongo_db {
         document body;
 
         body << "from" << op.from
-             << "to" << op.to
-             << "amount" << op.amount.to_string()
-             << "memo" << op.memo;
+             << "to" << op.to;
+        body << "amount" << format_asset(op.amount);
+        body << "memo" << op.memo;
 
         data << "transfer_to_savings" << body;
     }
@@ -469,9 +476,9 @@ namespace mongo_db {
         document body;
 
         body << "from" << op.from
-             << "to" << op.to
-             << "amount" << op.amount.to_string()
-             << "memo" << op.memo
+             << "to" << op.to;
+        body << "amount" << format_asset(op.amount);
+        body << "memo" << op.memo
              << "request_id" << std::to_string(op.request_id);
 
         data << "transfer_from_savings" << body;
@@ -551,9 +558,9 @@ namespace mongo_db {
         document body;
 
         body << "owner" << op.owner
-             << "requestid" << std::to_string(op.requestid)
-             << "amount_in" << op.amount_in.to_string()
-             << "amount_out" << op.amount_out.to_string();
+             << "requestid" << std::to_string(op.requestid);
+        body << "amount_in" << format_asset(op.amount_in);
+        body << "amount_out" << format_asset(op.amount_out);
 
         data << "fill_convert_request" << body;
     }
@@ -562,10 +569,10 @@ namespace mongo_db {
         document body;
 
         body << "author" << op.author
-             << "permlink" << op.permlink
-             << "sbd_payout" << op.sbd_payout.to_string()
-             << "steem_payout" << op.steem_payout.to_string()
-             << "vesting_payout" << op.vesting_payout.to_string();
+             << "permlink" << op.permlink;
+        body << "sbd_payout" << format_asset(op.sbd_payout);
+        body << "steem_payout" << format_asset(op.steem_payout);
+        body << "vesting_payout" << format_asset(op.vesting_payout);
 
         data << "author_reward" << body;
     }
@@ -573,9 +580,9 @@ namespace mongo_db {
     void operation_writer::operator()(const curation_reward_operation &op) {
         document body;
 
-        body << "curator" << op.curator
-             << "reward" << op.reward.to_string()
-             << "comment_author" << op.comment_author
+        body << "curator" << op.curator;
+        body << "reward" << format_asset(op.reward);
+        body << "comment_author" << op.comment_author
              << "comment_permlink" << op.comment_permlink;
 
         data << "curation_reward" << body;
@@ -585,8 +592,8 @@ namespace mongo_db {
         document body;
 
         body << "author" << op.author
-             << "permlink" << op.permlink
-             << "payout" << op.payout.to_string();
+             << "permlink" << op.permlink;
+        body << "payout" << format_asset(op.payout);
 
         data << "comment_reward" << body;
     }
@@ -594,8 +601,8 @@ namespace mongo_db {
     void operation_writer::operator()(const liquidity_reward_operation &op) {
         document body;
 
-        body << "owner" << op.owner
-             << "payout" << op.payout.to_string();
+        body << "owner" << op.owner;
+        body << "payout" << format_asset(op.payout);
 
         data << "liquidity_reward" << body;
     }
@@ -603,8 +610,8 @@ namespace mongo_db {
     void operation_writer::operator()(const interest_operation &op) {
         document body;
 
-        body << "owner" << op.owner
-             << "interest" << op.interest.to_string();
+        body << "owner" << op.owner;
+        body << "interest" << format_asset(op.interest);
 
         data << "interest" << body;
     }
@@ -613,9 +620,9 @@ namespace mongo_db {
         document body;
 
         body << "from_account" << op.from_account
-             << "to_account" << op.to_account
-             << "withdrawn" << op.withdrawn.to_string()
-             << "deposited" << op.deposited.to_string();
+             << "to_account" << op.to_account;
+        body << "withdrawn" << format_asset(op.withdrawn);
+        body << "deposited" << format_asset(op.deposited);
 
         data << "fill_vesting_withdraw" << body;
     }
@@ -624,11 +631,11 @@ namespace mongo_db {
         document body;
 
         body << "current_owner" << op.current_owner
-             << "current_orderid" << std::to_string(op.current_orderid)
-             << "current_pays" << op.current_pays.to_string()
-             << "open_owner" << op.open_owner
-             << "open_orderid" << std::to_string(op.open_orderid)
-             << "open_pays" << op.open_pays.to_string();
+             << "current_orderid" << std::to_string(op.current_orderid);
+        body << "current_pays" << format_asset(op.current_pays);
+        body << "open_owner" << op.open_owner
+             << "open_orderid" << std::to_string(op.open_orderid);
+        body << "open_pays" << format_asset(op.open_pays);
 
         data << "fill_order" << body;
     }
@@ -645,9 +652,9 @@ namespace mongo_db {
         document body;
 
         body << "from" << op.from
-             << "to" << op.to
-             << "amount" << op.amount.to_string()
-             << "request_id" << std::to_string(op.request_id)
+             << "to" << op.to;
+        body << "amount" << format_asset(op.amount);
+        body << "request_id" << std::to_string(op.request_id)
              << "memo" << op.memo;
 
         data << "fill_transfer_from_savings" << body;
