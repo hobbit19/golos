@@ -49,7 +49,7 @@ namespace mongo_db {
             boost::program_options::options_description &cfg) {
         cli.add_options()
                 ("mongodb-uri",
-                 boost::program_options::value<string>()->default_value("mongodb://127.0.0.1:27017/Golos"),
+                 boost::program_options::value<string>()->default_value("mongodb://172.17.0.1:27017/Golos"),
                 "Mongo DB connection string");
         cfg.add(cli);
     }
@@ -73,7 +73,7 @@ namespace mongo_db {
                 });
 
             } else {
-                ilog("Mongo plugin configured, but no --mongodb-uri specified. Plugin disabled.");
+                ilog("Mongo plugin configured, but no mongodb-uri specified. Plugin disabled.");
             }
 
             ilog("mongo_db plugin: plugin_initialize() end");
