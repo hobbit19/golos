@@ -58,6 +58,10 @@ namespace mongo_db {
         catch (mongocxx::exception & ex) {
             ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
         }
+        catch (...) {
+            ilog("Unknown exception in MongoDB on_block");
+        }
+
     }
 
     void mongo_db_writer::write_blocks() {
