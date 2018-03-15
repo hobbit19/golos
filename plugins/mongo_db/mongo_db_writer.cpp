@@ -44,13 +44,19 @@ namespace mongo_db {
     void mongo_db_writer::on_block(const signed_block& block) {
         try {
 
+            ilog("MongoDB on_block: pushing block number ${p}", ("p", block.block_num()));
             _blocks[block.block_num()] = block;
 
             // Update last irreversible block number
             last_irreversible_block_num = _db.last_non_undoable_block_num();
             if (last_irreversible_block_num >= _blocks.begin()->first) {
                 // Having irreversible blocks. Writing em into Mongo.
-                write_blocks();
+                try {
+                    write_blocks();
+                }
+                catch (...) {
+                    ilog("Exception in MongoDB on_block while writing blocks");
+                }
             }
 
             ++processed_blocks;
