@@ -43,7 +43,6 @@ namespace mongo_db {
 
     void mongo_db_writer::on_block(const signed_block& block) {
         try {
-
             ilog("MongoDB on_block: pushing block number ${p}", ("p", block.block_num()));
             _blocks[block.block_num()] = block;
 
@@ -51,12 +50,7 @@ namespace mongo_db {
             last_irreversible_block_num = _db.last_non_undoable_block_num();
             if (last_irreversible_block_num >= _blocks.begin()->first) {
                 // Having irreversible blocks. Writing em into Mongo.
-                try {
-                    write_blocks();
-                }
-                catch (...) {
-                    ilog("Exception in MongoDB on_block while writing blocks");
-                }
+                write_blocks();
             }
 
             ++processed_blocks;
@@ -67,26 +61,32 @@ namespace mongo_db {
         catch (...) {
             ilog("Unknown exception in MongoDB on_block");
         }
-
     }
 
     void mongo_db_writer::write_blocks() {
+        try {
+            mongocxx::options::bulk_write bulk_opts;
+            bulk_opts.ordered(false);
+            mongocxx::bulk_write _bulk{bulk_opts};
 
-        mongocxx::options::bulk_write bulk_opts;
-        bulk_opts.ordered(false);
-        mongocxx::bulk_write _bulk{bulk_opts};
+            // Write all the blocks that has num less then last irreversible block
+            while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
+                auto head_iter = _blocks.begin();
+                write_block(head_iter->second, _bulk);
+                _blocks.erase(head_iter);
+            }
 
-        // Write all the blocks that has num less then last irreversible block
-        while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
-            auto head_iter = _blocks.begin();
-            write_block(head_iter->second, _bulk);
-            _blocks.erase(head_iter);
+            auto blocks_table = mongo_conn[db_name][blocks]; // Blocks
+
+            if (!blocks_table.bulk_write(_bulk)) {
+                ilog("Failed to write blocks to Mongo DB");
+            }
         }
-
-        auto blocks_table = mongo_conn[db_name][blocks]; // Blocks
-
-        if (!blocks_table.bulk_write(_bulk)) {
-            ilog("Failed to write blocks to Mongo DB");
+        catch (mongocxx::exception & ex) {
+            ilog("Exception in MongoDB write_blocks: ${p}", ("p", ex.what()));
+        }
+        catch (...) {
+            ilog("Unknown exception in MongoDB write_blocks");
         }
     }
 
