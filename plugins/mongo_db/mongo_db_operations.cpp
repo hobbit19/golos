@@ -677,4 +677,15 @@ namespace mongo_db {
         body << "comment_payout_update" << body;
     }
 
+    void operation_writer::operator()(const comment_benefactor_reward_operation& op) {
+        document body;
+
+        body << "benefactor" << op.benefactor
+             << "author" << op.author
+             << "permlink" << op.permlink;
+        body << "reward" << format_asset(op.reward);
+
+        body << "comment_benefactor_reward_operation" << body;
+    }
+
 }}}

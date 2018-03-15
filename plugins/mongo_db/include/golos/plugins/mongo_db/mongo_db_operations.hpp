@@ -79,6 +79,7 @@ namespace mongo_db {
         void operator()(const fill_transfer_from_savings_operation &op);
         void operator()(const hardfork_operation &op);
         void operator()(const comment_payout_update_operation &op);
+        void operator()(const comment_benefactor_reward_operation& op);
 
     private:
         document data;
