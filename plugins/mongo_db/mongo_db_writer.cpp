@@ -34,6 +34,8 @@ namespace mongo_db {
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
             db_name = uri.database().empty() ? "Golos" : uri.database();
+            blocks_table = mongo_conn[db_name][blocks]; // Blocks
+            bulk_opts.ordered(false);
             ilog("MongoDB plugin initialized.");
         }
         catch (mongocxx::exception & ex) {
@@ -65,8 +67,10 @@ namespace mongo_db {
 
     void mongo_db_writer::write_blocks() {
         try {
-            mongocxx::options::bulk_write bulk_opts;
-            bulk_opts.ordered(false);
+            if (_blocks.empty()) {
+                return;
+            }
+            ilog("mongo_db_writer::write_blocks start");
             mongocxx::bulk_write _bulk{bulk_opts};
 
             // Write all the blocks that has num less then last irreversible block
@@ -75,8 +79,6 @@ namespace mongo_db {
                 write_block(head_iter->second, _bulk);
                 _blocks.erase(head_iter);
             }
-
-            auto blocks_table = mongo_conn[db_name][blocks]; // Blocks
 
             if (!blocks_table.bulk_write(_bulk)) {
                 ilog("Failed to write blocks to Mongo DB");

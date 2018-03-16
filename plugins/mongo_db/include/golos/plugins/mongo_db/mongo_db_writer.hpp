@@ -54,6 +54,8 @@ namespace mongo_db {
         mongocxx::instance mongo_inst;
         mongocxx::uri uri;
         mongocxx::client mongo_conn;
+        mongocxx::collection blocks_table;
+        mongocxx::options::bulk_write bulk_opts;
 
         golos::chain::database &_db;
     };
