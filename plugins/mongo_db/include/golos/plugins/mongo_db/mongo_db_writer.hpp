@@ -39,7 +39,7 @@ namespace mongo_db {
         void write_block(const signed_block& block, mongocxx::bulk_write& _bulk);
         document write_transaction(const signed_transaction& tran);
 
-        size_t processed_blocks = 0;
+        uint64_t processed_blocks = 0;
 
         std::string db_name;
         static const std::string blocks;
