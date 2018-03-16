@@ -134,6 +134,10 @@ namespace mongo_db {
             mongocxx::model::insert_one insert_msg{doc.view()};
             _bulk.append(insert_msg);
         }
+        catch (std::exception& ex) {
+            ilog("std::exception in MongoDB write_block: ${p}", ("p", ex.what()));
+            throw;
+        }
         catch (fc::exception & ex) {
             ilog("fc::exception in MongoDB write_block: ${p}", ("p", ex.what()));
             throw;
@@ -148,26 +152,44 @@ namespace mongo_db {
     }
 
     document mongo_db_writer::write_transaction(const signed_transaction& tran) {
+        try {
+            // Write transaction general information
+            document doc;
+            doc << "id"             << tran.id().str()
+                << "ref_block_num"  << std::to_string(tran.ref_block_num)
+                << "expiration"     << fc::time_point::now();
 
-        // Write transaction general information
-        document doc;
-        doc << "id"             << tran.id().str()
-            << "ref_block_num"  << std::to_string(tran.ref_block_num)
-            << "expiration"     << fc::time_point::now();
+            array oper_arr;
+            if (!tran.operations.empty()) {
+                // Write every operation in transaction
+                for (const auto& op : tran.operations) {
 
-        array oper_arr;
-        if (!tran.operations.empty()) {
-            // Write every operation in transaction
-            for (const auto& op : tran.operations) {
+                    try {
+                        operation_writer op_writer;
+                        op.visit(op_writer);
 
-                operation_writer op_writer;
-                op.visit(op_writer);
-
-                oper_arr << op_writer.get_document();
+                        oper_arr << op_writer.get_document();
+                    }
+                    catch (std::exception& ex) {
+                        ilog("std::exception in MongoDB op.visit: ${p}", ("p", ex.what()));
+                        throw;
+                    }
+                    catch (...) {
+                        ilog("Unknown exception in MongoDB op.visit");
+                        throw;
+                    }
+                }
+                doc << operations << oper_arr;
             }
-            doc << operations << oper_arr;
+            return doc;
         }
-
-        return doc;
+        catch (std::exception& ex) {
+            ilog("std::exception in MongoDB write_transaction: ${p}", ("p", ex.what()));
+            throw;
+        }
+        catch (...) {
+            ilog("Unknown exception in MongoDB write_transaction");
+            throw;
+        }
     }
 }}}
