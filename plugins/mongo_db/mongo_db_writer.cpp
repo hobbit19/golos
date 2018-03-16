@@ -29,7 +29,6 @@ namespace mongo_db {
     }
 
     void mongo_db_writer::initialize(const std::string& uri_str) {
-
         try {
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
@@ -44,6 +43,10 @@ namespace mongo_db {
         }
         catch (mongocxx::exception & ex) {
             ilog("Exception in MongoDB initialize: ${p}", ("p", ex.what()));
+        }
+        catch (...) {
+            ilog("Unknown exception in MongoDB");
+            throw;
         }
     }
 
@@ -66,6 +69,10 @@ namespace mongo_db {
         }
         catch (mongocxx::exception & ex) {
             ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
+        }
+        catch (...) {
+            ilog("Unknown exception in MongoDB");
+            throw;
         }
     }
 
@@ -94,7 +101,10 @@ namespace mongo_db {
         catch (mongocxx::exception & ex) {
             ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
         }
-
+        catch (...) {
+            ilog("Unknown exception in MongoDB");
+            throw;
+        }
     }
 
     void mongo_db_writer::write_block(const signed_block& block, mongocxx::bulk_write& _bulk) {
