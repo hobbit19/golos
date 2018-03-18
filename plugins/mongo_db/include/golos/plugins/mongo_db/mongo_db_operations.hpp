@@ -82,6 +82,7 @@ namespace mongo_db {
         void operator()(const comment_benefactor_reward_operation& op);
 
     private:
+        void log_operation(const std::string& name);
         document data;
     };
 }}}

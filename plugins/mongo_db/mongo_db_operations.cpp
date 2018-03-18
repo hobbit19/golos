@@ -65,8 +65,14 @@ namespace mongo_db {
         return data;
     }
 
+    void operation_writer::log_operation(const std::string& name) {
+        ilog("MongoDB operation: ${p}", ("p", name));
+    }
+
     void operation_writer::operator()(const vote_operation &op) {
         document body;
+
+        log_operation("vote");
 
         body << "voter"  << op.voter
              << "author" << op.author
@@ -78,6 +84,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const comment_operation &op) {
         document body;
+
+        log_operation("comment");
 
         body << "parent_author"  << op.parent_author
              << "parent_permlink" << op.parent_permlink
@@ -93,6 +101,8 @@ namespace mongo_db {
     void operation_writer::operator()(const transfer_operation &op) {
         document body;
 
+        log_operation("transfer");
+
         body << "from"  << op.from
              << "to" << op.to;
         body << "amount" << format_asset(op.amount)
@@ -104,6 +114,8 @@ namespace mongo_db {
     void operation_writer::operator()(const transfer_to_vesting_operation &op) {
         document body;
 
+        log_operation("transfer_to_vesting");
+
         body << "from"  << op.from
              << "to" << op.to;
         body << "amount" << format_asset(op.amount);
@@ -114,6 +126,8 @@ namespace mongo_db {
     void operation_writer::operator()(const withdraw_vesting_operation &op) {
         document body;
 
+        log_operation("withdraw_vesting");
+
         body << "account"  << op.account;
         body << "vesting_shares" << format_asset(op.vesting_shares);
 
@@ -122,6 +136,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const limit_order_create_operation &op) {
         document body;
+
+        log_operation("limit_order_create");
 
         body << "owner"  << op.owner
              << "orderid" << std::to_string(op.orderid);
@@ -135,6 +151,8 @@ namespace mongo_db {
     void operation_writer::operator()(const limit_order_cancel_operation &op) {
         document body;
 
+        log_operation("limit_order_cancel");
+
         body << "owner"  << op.owner
              << "orderid" << std::to_string(op.orderid);
 
@@ -143,6 +161,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const feed_publish_operation &op) {
         document body;
+
+        log_operation("feed_publish");
 
         body << "publisher"  << op.publisher
              << "exchange_rate" << std::to_string(op.exchange_rate.to_real());
@@ -153,6 +173,8 @@ namespace mongo_db {
     void operation_writer::operator()(const convert_operation &op) {
         document body;
 
+        log_operation("convert");
+
         body << "owner"  << op.owner
              << "requestid" << std::to_string(op.requestid);
         body << "amount" << format_asset(op.amount);
@@ -162,6 +184,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const account_create_operation &op) {
         document body;
+
+        log_operation("account_create");
 
         body << "fee"  << op.fee.to_string()
              << "creator" << op.creator
@@ -176,6 +200,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const account_update_operation &op) {
         document body;
+
+        log_operation("account_update");
 
         document owner_doc;
         if (op.owner) {
@@ -213,6 +239,8 @@ namespace mongo_db {
     void operation_writer::operator()(const witness_update_operation &op) {
         document body;
 
+        log_operation("witness_update");
+
         body << "owner"  << op.owner
              << "fee" << op.fee.to_string()
              << "url" << op.url
@@ -225,6 +253,8 @@ namespace mongo_db {
     void operation_writer::operator()(const account_witness_vote_operation &op) {
         document body;
 
+        log_operation("account_witness_vote");
+
         body << "account"  << op.account
              << "witness" << op.witness
              << "approve" << op.approve;
@@ -235,6 +265,8 @@ namespace mongo_db {
     void operation_writer::operator()(const account_witness_proxy_operation &op) {
         document body;
 
+        log_operation("account_witness_proxy");
+
         body << "account"  << op.account
              << "witness" << op.proxy;
 
@@ -243,6 +275,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const pow_operation &op) {
         document body;
+
+        log_operation("pow");
 
         document pow_doc;
         pow_doc << "worker" << (std::string)op.work.worker
@@ -262,6 +296,8 @@ namespace mongo_db {
     void operation_writer::operator()(const custom_operation &op) {
         document body;
 
+        log_operation("custom");
+
         array auths;
         for (auto iter : op.required_auths) {
             auths << iter;
@@ -274,6 +310,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const report_over_production_operation &op) {
         document body;
+
+        log_operation("report_over_production");
 
         document doc1;
         doc1 << "id" << op.first_block.id().str()
@@ -295,6 +333,8 @@ namespace mongo_db {
     void operation_writer::operator()(const delete_comment_operation &op) {
         document body;
 
+        log_operation("delete_comment");
+
         body << "author" << op.author
              << "permlink" << op.permlink;
 
@@ -304,6 +344,8 @@ namespace mongo_db {
     void operation_writer::operator()(const custom_json_operation &op) {
         document body;
 
+        log_operation("custom_json");
+
         body << "id" << op.id
              << "json" << op.json;
 
@@ -312,6 +354,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const comment_options_operation &op) {
         document body;
+
+        log_operation("comment_options");
 
         body << "author" << op.author
              << "permlink" << op.permlink
@@ -326,6 +370,8 @@ namespace mongo_db {
     void operation_writer::operator()(const set_withdraw_vesting_route_operation &op) {
         document body;
 
+        log_operation("set_withdraw_vesting_route");
+
         body << "from_account" << op.from_account
              << "to_account" << op.to_account
              << "percent" << std::to_string(op.percent)
@@ -336,6 +382,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const limit_order_create2_operation &op) {
         document body;
+
+        log_operation("limit_order_create2");
 
         body << "owner" << op.owner
              << "orderid" << std::to_string(op.orderid)
@@ -350,6 +398,8 @@ namespace mongo_db {
     void operation_writer::operator()(const challenge_authority_operation &op) {
         document body;
 
+        log_operation("challenge_authority");
+
         body << "challenger" << op.challenger
              << "challenged" << op.challenged
              << "require_owner" << (op.require_owner ? std::string("true") : std::string("false"));
@@ -360,6 +410,8 @@ namespace mongo_db {
     void operation_writer::operator()(const prove_authority_operation &op) {
         document body;
 
+        log_operation("prove_authority");
+
         body << "challenged" << op.challenged
              << "require_owner" << (op.require_owner ? std::string("true") : std::string("false"));
 
@@ -368,6 +420,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const request_account_recovery_operation &op) {
         document body;
+
+        log_operation("request_account_recovery");
 
         body << "recovery_account" << op.recovery_account
              << "account_to_recover" << op.account_to_recover;
@@ -379,6 +433,8 @@ namespace mongo_db {
     void operation_writer::operator()(const recover_account_operation &op) {
         document body;
 
+        log_operation("recover_account");
+
         body << "account_to_recover" << op.account_to_recover;
         body << "new_owner_authority" << format_authority(op.new_owner_authority);
         body << "recent_owner_authority" << format_authority(op.recent_owner_authority);
@@ -389,6 +445,8 @@ namespace mongo_db {
     void operation_writer::operator()(const change_recovery_account_operation &op) {
         document body;
 
+        log_operation("change_recovery_account");
+
         body << "account_to_recover" << op.account_to_recover
              << "new_recovery_account" << op.new_recovery_account;
 
@@ -397,6 +455,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const escrow_transfer_operation &op) {
         document body;
+
+        log_operation("escrow_transfer");
 
         body << "from" << op.from
              << "to" << op.to
@@ -413,6 +473,8 @@ namespace mongo_db {
     void operation_writer::operator()(const escrow_dispute_operation &op) {
         document body;
 
+        log_operation("escrow_dispute");
+
         body << "from" << op.from
              << "to" << op.to
              << "agent" << op.agent
@@ -424,6 +486,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const escrow_release_operation &op) {
         document body;
+
+        log_operation("escrow_release");
 
         body << "from" << op.from
              << "to" << op.to
@@ -440,6 +504,8 @@ namespace mongo_db {
     void operation_writer::operator()(const pow2_operation &op) {
         document body;
 
+        log_operation("pow2");
+
         body << "props" << format_chain_properties(op.props);
         if (op.new_owner_key) {
             body << "new_owner_key" << (std::string)(*op.new_owner_key);
@@ -450,6 +516,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const escrow_approve_operation &op) {
         document body;
+
+        log_operation("escrow_approve");
 
         body << "from" << op.from
              << "to" << op.to
@@ -464,6 +532,8 @@ namespace mongo_db {
     void operation_writer::operator()(const transfer_to_savings_operation &op) {
         document body;
 
+        log_operation("transfer_to_savings");
+
         body << "from" << op.from
              << "to" << op.to;
         body << "amount" << format_asset(op.amount);
@@ -474,6 +544,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const transfer_from_savings_operation &op) {
         document body;
+
+        log_operation("transfer_from_savings");
 
         body << "from" << op.from
              << "to" << op.to;
@@ -487,6 +559,8 @@ namespace mongo_db {
     void operation_writer::operator()(const cancel_transfer_from_savings_operation &op) {
         document body;
 
+        log_operation("cancel_transfer_from_savings");
+
         body << "from" << op.from
              << "request_id" << std::to_string(op.request_id);
 
@@ -495,6 +569,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const custom_binary_operation &op) {
         document body;
+
+        log_operation("custom_binary");
 
         array required_owner_auths_arr;
         for (auto iter : op.required_owner_auths) {
@@ -528,6 +604,8 @@ namespace mongo_db {
     void operation_writer::operator()(const decline_voting_rights_operation &op) {
         document body;
 
+        log_operation("decline_voting_rights");
+
         body << "account" << op.account
              << "decline" << (op.decline ? std::string("true") : std::string("false"));
 
@@ -536,6 +614,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const reset_account_operation &op) {
         document body;
+
+        log_operation("reset_account");
 
         body << "reset_account" << op.reset_account
              << "account_to_reset" << op.account_to_reset;
@@ -547,6 +627,8 @@ namespace mongo_db {
     void operation_writer::operator()(const set_reset_account_operation &op) {
         document body;
 
+        log_operation("set_reset_account");
+
         body << "account" << op.account
              << "current_reset_account" << op.current_reset_account
              << "reset_account" << op.reset_account;
@@ -556,6 +638,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const fill_convert_request_operation &op) {
         document body;
+
+        log_operation("fill_convert_request");
 
         body << "owner" << op.owner
              << "requestid" << std::to_string(op.requestid);
@@ -567,6 +651,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const author_reward_operation &op) {
         document body;
+
+        log_operation("author_reward");
 
         body << "author" << op.author
              << "permlink" << op.permlink;
@@ -580,6 +666,8 @@ namespace mongo_db {
     void operation_writer::operator()(const curation_reward_operation &op) {
         document body;
 
+        log_operation("curation_reward");
+
         body << "curator" << op.curator;
         body << "reward" << format_asset(op.reward);
         body << "comment_author" << op.comment_author
@@ -591,6 +679,8 @@ namespace mongo_db {
     void operation_writer::operator()(const comment_reward_operation &op) {
         document body;
 
+        log_operation("comment_reward");
+
         body << "author" << op.author
              << "permlink" << op.permlink;
         body << "payout" << format_asset(op.payout);
@@ -601,6 +691,8 @@ namespace mongo_db {
     void operation_writer::operator()(const liquidity_reward_operation &op) {
         document body;
 
+        log_operation("liquidity_reward");
+
         body << "owner" << op.owner;
         body << "payout" << format_asset(op.payout);
 
@@ -610,6 +702,8 @@ namespace mongo_db {
     void operation_writer::operator()(const interest_operation &op) {
         document body;
 
+        log_operation("interest");
+
         body << "owner" << op.owner;
         body << "interest" << format_asset(op.interest);
 
@@ -618,6 +712,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const fill_vesting_withdraw_operation &op) {
         document body;
+
+        log_operation("fill_vesting_withdraw");
 
         body << "from_account" << op.from_account
              << "to_account" << op.to_account;
@@ -629,6 +725,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const fill_order_operation &op) {
         document body;
+
+        log_operation("fill_order");
 
         body << "current_owner" << op.current_owner
              << "current_orderid" << std::to_string(op.current_orderid);
@@ -643,6 +741,8 @@ namespace mongo_db {
     void operation_writer::operator()(const shutdown_witness_operation &op) {
         document body;
 
+        log_operation("shutdown_witness");
+
         body << "owner" << op.owner;
 
         data << "shutdown_witness" << body;
@@ -650,6 +750,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const fill_transfer_from_savings_operation &op) {
         document body;
+
+        log_operation("fill_transfer_from_savings");
 
         body << "from" << op.from
              << "to" << op.to;
@@ -663,6 +765,8 @@ namespace mongo_db {
     void operation_writer::operator()(const hardfork_operation &op) {
         document body;
 
+        log_operation("hardfork");
+
         body << "hardfork_id" << std::to_string(op.hardfork_id);
 
         body << "hardfork" << body;
@@ -670,6 +774,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const comment_payout_update_operation &op) {
         document body;
+
+        log_operation("comment_payout_update");
 
         body << "author" << op.author
              << "permlink" << op.permlink;
@@ -679,6 +785,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const comment_benefactor_reward_operation& op) {
         document body;
+
+        log_operation("comment_benefactor_reward_operation");
 
         body << "benefactor" << op.benefactor
              << "author" << op.author
