@@ -47,8 +47,11 @@ namespace mongo_db {
 
     document format_asset(const asset& _asset) {
         document asset_doc;
-        asset_doc << "amount" << std::to_string(_asset.to_real())
-                  << "symbol_name" << _asset.symbol_name();
+        std::string value = std::to_string(_asset.to_real());
+
+        asset_doc << "amount" << (value.empty() ? "0" : value)
+                  << "symbol_name" << (_asset.symbol_name().empty() ? "_" : _asset.symbol_name());
+
         return asset_doc;
     }
 
