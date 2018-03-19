@@ -83,7 +83,6 @@ namespace mongo_db {
 
     private:
         void log_operation(const std::string& name);
-        void format_value(document& doc, const std::string& name, const std::string& value);
         document data;
     };
 }}}

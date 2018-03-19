@@ -47,12 +47,18 @@ namespace mongo_db {
 
     document format_asset(const asset& _asset) {
         document asset_doc;
-        std::string value = std::to_string(_asset.to_real());
 
-        asset_doc << "amount" << (value.empty() ? "0" : value)
-                  << "symbol_name" << (_asset.symbol_name().empty() ? "_" : _asset.symbol_name());
+        asset_doc << "amount" << std::to_string(_asset.to_real())
+                  << "symbol_name" << _asset.symbol_name();
 
         return asset_doc;
+    }
+
+    void format_value(document& doc, const std::string& name, const std::string& value) {
+        if (name.empty() || value.empty()) {
+            return;
+        }
+        doc << name << value;
     }
 
     std::string to_string(const signature_type& signature) {
@@ -69,14 +75,7 @@ namespace mongo_db {
     }
 
     void operation_writer::log_operation(const std::string& name) {
-        ilog("MongoDB operation: ${p}", ("p", name));
-    }
-
-    void operation_writer::format_value(document& doc, const std::string& name, const std::string& value) {
-        if (name.empty() || value.empty()) {
-            return;
-        }
-        doc << name << value;
+        //ilog("MongoDB operation: ${p}", ("p", name));
     }
 
     void operation_writer::operator()(const vote_operation &op) {
@@ -155,7 +154,7 @@ namespace mongo_db {
         body << "min_to_receive" << format_asset(op.min_to_receive);
         format_value(body, "expiration", op.expiration);
 
-        body << "limit_order_create" << body;
+        data << "limit_order_create" << body;
     }
 
     void operation_writer::operator()(const limit_order_cancel_operation &op) {
@@ -794,7 +793,7 @@ namespace mongo_db {
         format_value(body, "author", op.author);
         format_value(body, "permlink", op.permlink);
 
-        body << "comment_payout_update" << body;
+        data << "comment_payout_update" << body;
     }
 
     void operation_writer::operator()(const comment_benefactor_reward_operation& op) {
@@ -807,7 +806,7 @@ namespace mongo_db {
         format_value(body, "permlink", op.permlink);
         body << "reward" << format_asset(op.reward);
 
-        body << "comment_benefactor_reward_operation" << body;
+        data << "comment_benefactor_reward_operation" << body;
     }
 
 }}}
