@@ -13,15 +13,20 @@ namespace mongo_db {
 
     class mongo_db_plugin::mongo_db_plugin_impl {
     public:
-        mongo_db_plugin_impl(mongo_db_plugin &plugin, const std::string& uri_str)
+        mongo_db_plugin_impl(mongo_db_plugin &plugin)
                 : _my(plugin),
                   _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
-            writer.initialize(uri_str);
+        }
+
+        bool initialize(const std::string& uri) {
+            return writer.initialize(uri);
         }
 
         ~mongo_db_plugin_impl() = default;
 
-        void on_block(const signed_block &block);
+        void on_block(const signed_block &block) {
+            writer.on_block(block);
+        }
 
         golos::chain::database &database() const {
             return _db;
@@ -32,10 +37,6 @@ namespace mongo_db {
 
         golos::chain::database &_db;
     };
-
-    void mongo_db_plugin::mongo_db_plugin_impl::on_block(const signed_block &block) {
-        writer.on_block(block);
-    }
 
     // Plugin
     mongo_db_plugin::mongo_db_plugin() {
@@ -63,8 +64,13 @@ namespace mongo_db {
                 std::string uri_str = options.at("mongodb-uri").as<std::string>();
                 ilog("Connecting MongoDB to ${u}", ("u", uri_str));
 
-                _my.reset(new mongo_db_plugin_impl(*this, uri_str));
+                _my.reset(new mongo_db_plugin_impl(*this));
 
+                if (!_my->initialize(uri_str)) {
+                    ilog("Cannot initialize MongoDB plugin. Plugin disabled.");
+                    _my.reset();
+                    return;
+                }
                 // Set applied block listener
                 auto &db = _my->database();
 

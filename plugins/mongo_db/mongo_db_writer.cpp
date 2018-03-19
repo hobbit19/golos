@@ -28,7 +28,7 @@ namespace mongo_db {
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
     }
 
-    void mongo_db_writer::initialize(const std::string& uri_str) {
+    bool mongo_db_writer::initialize(const std::string& uri_str) {
         try {
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
@@ -36,17 +36,16 @@ namespace mongo_db {
             blocks_table = mongo_conn[db_name][blocks]; // Blocks
             bulk_opts.ordered(false);
             ilog("MongoDB plugin initialized.");
-        }
-        catch (fc::exception & ex) {
-            ilog("fc::exception in MongoDB initialize: ${p}", ("p", ex.what()));
-            throw;
+
+            return true;
         }
         catch (mongocxx::exception & ex) {
             ilog("Exception in MongoDB initialize: ${p}", ("p", ex.what()));
+            return false;
         }
         catch (...) {
             ilog("Unknown exception in MongoDB");
-            throw;
+            return false;
         }
     }
 
@@ -65,131 +64,85 @@ namespace mongo_db {
         }
         catch (fc::exception & ex) {
             ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
-            throw;
         }
         catch (mongocxx::exception & ex) {
             ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
         }
         catch (...) {
             ilog("Unknown exception in MongoDB");
-            throw;
         }
     }
 
     void mongo_db_writer::write_blocks() {
-        try {
-            if (_blocks.empty()) {
-                return;
-            }
-            mongocxx::bulk_write _bulk{bulk_opts};
-
-            ilog("Formatting blocks");
-
-            // Write all the blocks that has num less then last irreversible block
-            while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
-                auto head_iter = _blocks.begin();
-                write_block(head_iter->second, _bulk);
-                _blocks.erase(head_iter);
-            }
-
-            ilog("Pushing blocks");
-
-            if (!blocks_table.bulk_write(_bulk)) {
-                ilog("Failed to write blocks to Mongo DB");
-            }
+        if (_blocks.empty()) {
+            return;
         }
-        catch (fc::exception & ex) {
-            ilog("fc::exception in MongoDB write_blocks: ${p}", ("p", ex.what()));
-            throw;
+        mongocxx::bulk_write _bulk{bulk_opts};
+
+        // Write all the blocks that has num less then last irreversible block
+        while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
+            auto head_iter = _blocks.begin();
+            write_block(head_iter->second, _bulk);
+            _blocks.erase(head_iter);
         }
-        catch (mongocxx::exception & ex) {
-            ilog("Exception in MongoDB write_blocks: ${p}", ("p", ex.what()));
-        }
-        catch (...) {
-            ilog("Unknown exception in MongoDB write_blocks");
-            throw;
+
+        if (!blocks_table.bulk_write(_bulk)) {
+            ilog("Failed to write blocks to Mongo DB");
         }
     }
 
     void mongo_db_writer::write_block(const signed_block& block, mongocxx::bulk_write& _bulk) {
-        try {
-            auto doc = document {};
-            // First write some general information from Block
-            doc << "block_num"      << std::to_string(block.block_num())
-                << "block_id"       << block.id().str()
-                << "prev_block_id"  << block.previous.str()
-                << "timestamp"      << block.timestamp
-                << "witness"        << block.witness
-                << "created_at"     << fc::time_point::now();
+        auto doc = document {};
+        // First write some general information from Block
+        doc << "block_num"      << std::to_string(block.block_num())
+            << "block_id"       << block.id().str()
+            << "prev_block_id"  << block.previous.str()
+            << "timestamp"      << block.timestamp
+            << "witness"        << block.witness
+            << "created_at"     << fc::time_point::now();
 
-            array tran_arr;
-            if (!block.transactions.empty()) {
-                // Now write every transaction from Block
-                for (const auto& trx : block.transactions) {
-                    tran_arr << write_transaction(trx);
-                }
-                doc << transactions << tran_arr;
+        array tran_arr;
+        if (!block.transactions.empty()) {
+            // Now write every transaction from Block
+            for (const auto& trx : block.transactions) {
+                tran_arr << write_transaction(trx);
             }
+            doc << transactions << tran_arr;
+        }
 
-            mongocxx::model::insert_one insert_msg{doc.view()};
-            _bulk.append(insert_msg);
-        }
-        catch (std::exception& ex) {
-            ilog("std::exception in MongoDB write_block: ${p}", ("p", ex.what()));
-            throw;
-        }
-        catch (fc::exception & ex) {
-            ilog("fc::exception in MongoDB write_block: ${p}", ("p", ex.what()));
-            throw;
-        }
-        catch (mongocxx::exception & ex) {
-            ilog("Exception in MongoDB write_block: ${p}", ("p", ex.what()));
-        }
-        catch (...) {
-            ilog("Unknown exception in MongoDB write_block");
-            throw;
-        }
+        mongocxx::model::insert_one insert_msg{doc.view()};
+        _bulk.append(insert_msg);
     }
 
     document mongo_db_writer::write_transaction(const signed_transaction& tran) {
-        try {
-            // Write transaction general information
-            document doc;
-            doc << "id"             << tran.id().str()
-                << "ref_block_num"  << std::to_string(tran.ref_block_num)
-                << "expiration"     << fc::time_point::now();
+        // Write transaction general information
+        document doc;
+        doc << "id"             << tran.id().str()
+            << "ref_block_num"  << std::to_string(tran.ref_block_num)
+            << "expiration"     << fc::time_point::now();
 
-            array oper_arr;
-            if (!tran.operations.empty()) {
-                // Write every operation in transaction
-                for (const auto& op : tran.operations) {
+        array oper_arr;
+        if (!tran.operations.empty()) {
+            // Write every operation in transaction
+            for (const auto& op : tran.operations) {
 
-                    try {
-                        operation_writer op_writer;
-                        op.visit(op_writer);
+                try {
+                    operation_writer op_writer;
+                    op.visit(op_writer);
 
-                        oper_arr << op_writer.get_document();
-                    }
-                    catch (std::exception& ex) {
-                        ilog("std::exception in MongoDB op.visit: ${p}", ("p", ex.what()));
-                        throw;
-                    }
-                    catch (...) {
-                        ilog("Unknown exception in MongoDB op.visit");
-                        throw;
-                    }
+                    oper_arr << op_writer.get_document();
                 }
-                doc << operations << oper_arr;
+                catch (std::exception& ex) {
+                    ilog("std::exception in MongoDB op.visit: ${p}", ("p", ex.what()));
+                    throw;
+                }
+                catch (...) {
+                    ilog("Unknown exception in MongoDB op.visit");
+                    throw;
+                }
             }
-            return doc;
+            doc << operations << oper_arr;
         }
-        catch (std::exception& ex) {
-            ilog("std::exception in MongoDB write_transaction: ${p}", ("p", ex.what()));
-            throw;
-        }
-        catch (...) {
-            ilog("Unknown exception in MongoDB write_transaction");
-            throw;
-        }
+        return doc;
     }
 }}}

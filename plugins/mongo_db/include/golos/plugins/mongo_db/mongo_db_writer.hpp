@@ -29,7 +29,7 @@ namespace mongo_db {
         mongo_db_writer();
         ~mongo_db_writer() = default;
 
-        void initialize(const std::string& uri_str);
+        bool initialize(const std::string& uri_str);
 
         void on_block(const signed_block& block);
 
