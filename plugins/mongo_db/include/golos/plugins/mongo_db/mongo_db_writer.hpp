@@ -35,11 +35,18 @@ namespace mongo_db {
 
     private:
 
+        void init_tables();
         void write_blocks();
+        std::string format_table_name(const size_t num);
         void write_block(const signed_block& block, mongocxx::bulk_write& _bulk);
-        document write_transaction(const signed_transaction& tran);
+        document format_transaction(const signed_transaction& tran);
+        void update_active_table();
 
         uint64_t processed_blocks = 0;
+        uint64_t tables_count = 1;
+        uint64_t max_table_size = 1000000;
+        uint64_t current_table_size = 0;
+
 
         std::string db_name;
         static const std::string blocks;
@@ -52,9 +59,11 @@ namespace mongo_db {
 
         // Mongo connection members
         mongocxx::instance mongo_inst;
+        mongocxx::database mongo_database;
         mongocxx::uri uri;
         mongocxx::client mongo_conn;
-        mongocxx::collection blocks_table;
+        std::vector<std::shared_ptr<mongocxx::collection>> blocks_tables;
+        mongocxx::collection active_blocks_table;
         mongocxx::options::bulk_write bulk_opts;
 
         golos::chain::database &_db;
