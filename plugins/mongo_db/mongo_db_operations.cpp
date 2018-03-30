@@ -69,7 +69,9 @@ namespace mongo_db {
         }
         return retVal;
     }
+
     /////////////////////////////////////////////////
+
     document& operation_writer::get_document() {
         return data;
     }
@@ -807,6 +809,220 @@ namespace mongo_db {
         body << "reward" << format_asset(op.reward);
 
         data << "comment_benefactor_reward_operation" << body;
+    }
+
+    /////////////////////////////////////////////////
+
+    std::string operation_name::get_result() const {
+        return result;
+    }
+
+    void operation_name::operator()(const vote_operation &op) {
+        result = "vote";
+    }
+
+    void operation_name::operator()(const comment_operation &op) {
+        result = "comment";
+    }
+
+    void operation_name::operator()(const transfer_operation &op) {
+        result = "transfer";
+    }
+
+    void operation_name::operator()(const transfer_to_vesting_operation &op) {
+        result = "transfer_to_vesting";
+    }
+
+    void operation_name::operator()(const withdraw_vesting_operation &op) {
+        result = "withdraw_vesting";
+    }
+
+    void operation_name::operator()(const limit_order_create_operation &op) {
+        result = "limit_order_create";
+    }
+
+    void operation_name::operator()(const limit_order_cancel_operation &op) {
+        result = "limit_order_cancel";
+    }
+
+    void operation_name::operator()(const feed_publish_operation &op) {
+        result = "feed_publish";
+    }
+
+    void operation_name::operator()(const convert_operation &op) {
+        result = "convert";
+    }
+
+    void operation_name::operator()(const account_create_operation &op) {
+        result = "account_create";
+    }
+
+    void operation_name::operator()(const account_update_operation &op) {
+        result = "account_update";
+    }
+
+    void operation_name::operator()(const witness_update_operation &op) {
+        result = "witness_update";
+    }
+
+    void operation_name::operator()(const account_witness_vote_operation &op) {
+        result = "account_witness_vote";
+    }
+
+    void operation_name::operator()(const account_witness_proxy_operation &op) {
+        result = "account_witness_proxy";
+    }
+
+    void operation_name::operator()(const pow_operation &op) {
+        result = "pow";
+    }
+
+    void operation_name::operator()(const custom_operation &op) {
+        result = "custom";
+    }
+
+    void operation_name::operator()(const report_over_production_operation &op) {
+        result = "report_over_production";
+    }
+
+    void operation_name::operator()(const delete_comment_operation &op) {
+        result = "delete_comment";
+    }
+
+    void operation_name::operator()(const custom_json_operation &op) {
+        result = "custom_json";
+    }
+
+    void operation_name::operator()(const comment_options_operation &op) {
+        result = "comment_options";
+    }
+
+    void operation_name::operator()(const set_withdraw_vesting_route_operation &op) {
+        result = "set_withdraw_vesting_route";
+    }
+
+    void operation_name::operator()(const limit_order_create2_operation &op) {
+        result = "limit_order_create2";
+    }
+
+    void operation_name::operator()(const challenge_authority_operation &op) {
+        result = "challenge_authority";
+    }
+
+    void operation_name::operator()(const prove_authority_operation &op) {
+        result = "prove_authority";
+    }
+
+    void operation_name::operator()(const request_account_recovery_operation &op) {
+        result = "request_account_recovery";
+    }
+
+    void operation_name::operator()(const recover_account_operation &op) {
+        result = "recover_account";
+    }
+
+    void operation_name::operator()(const change_recovery_account_operation &op) {
+        result = "change_recovery_account";
+    }
+
+    void operation_name::operator()(const escrow_transfer_operation &op) {
+        result = "escrow_transfer";
+    }
+
+    void operation_name::operator()(const escrow_dispute_operation &op) {
+        result = "escrow_dispute";
+    }
+
+    void operation_name::operator()(const escrow_release_operation &op) {
+        result = "escrow_release";
+    }
+
+    void operation_name::operator()(const pow2_operation &op) {
+        result = "pow2";
+    }
+
+    void operation_name::operator()(const escrow_approve_operation &op) {
+        result = "escrow_approve";
+    }
+
+    void operation_name::operator()(const transfer_to_savings_operation &op) {
+        result = "transfer_to_savings";
+    }
+
+    void operation_name::operator()(const transfer_from_savings_operation &op) {
+        result = "transfer_from_savings";
+    }
+
+    void operation_name::operator()(const cancel_transfer_from_savings_operation &op) {
+        result = "cancel_transfer_from_savings";
+    }
+
+    void operation_name::operator()(const custom_binary_operation &op) {
+        result = "custom_binary";
+    }
+
+    void operation_name::operator()(const decline_voting_rights_operation &op) {
+        result = "decline_voting_rights";
+    }
+
+    void operation_name::operator()(const reset_account_operation &op) {
+        result = "reset_account";
+    }
+
+    void operation_name::operator()(const set_reset_account_operation &op) {
+        result = "set_reset_account";
+    }
+
+    void operation_name::operator()(const fill_convert_request_operation &op) {
+        result = "fill_convert_request";
+    }
+
+    void operation_name::operator()(const author_reward_operation &op) {
+        result = "author_reward";
+    }
+
+    void operation_name::operator()(const curation_reward_operation &op) {
+        result = "curation_reward";
+    }
+
+    void operation_name::operator()(const comment_reward_operation &op) {
+        result = "comment_reward";
+    }
+
+    void operation_name::operator()(const liquidity_reward_operation &op) {
+        result = "liquidity_reward";
+    }
+
+    void operation_name::operator()(const interest_operation &op) {
+        result = "interest";
+    }
+
+    void operation_name::operator()(const fill_vesting_withdraw_operation &op) {
+        result = "fill_vesting_withdraw";
+    }
+
+    void operation_name::operator()(const fill_order_operation &op) {
+        result = "fill_order";
+    }
+
+    void operation_name::operator()(const shutdown_witness_operation &op) {
+        result = "shutdown_witness";
+    }
+
+    void operation_name::operator()(const fill_transfer_from_savings_operation &op) {
+        result = "fill_transfer_from_savings";
+    }
+
+    void operation_name::operator()(const hardfork_operation &op) {
+        result = "hardfork";
+    }
+
+    void operation_name::operator()(const comment_payout_update_operation &op) {
+        result = "comment_payout_update";
+    }
+
+    void operation_name::operator()(const comment_benefactor_reward_operation& op) {
+        result = "comment_benefactor_reward_operation";
     }
 
 }}}

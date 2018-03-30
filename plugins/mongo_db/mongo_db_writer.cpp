@@ -34,7 +34,6 @@ namespace mongo_db {
             mongo_conn = mongocxx::client {uri};
             db_name = uri.database().empty() ? "Golos" : uri.database();
             mongo_database = mongo_conn[db_name];
-            init_table_names();
 
             bulk_opts.ordered(false);
             ilog("MongoDB plugin initialized.");
@@ -49,35 +48,6 @@ namespace mongo_db {
             ilog("Unknown exception in MongoDB");
             return false;
         }
-    }
-
-    void mongo_db_writer::init_table_names() {
-
-        bool has_table = true;
-
-        while (has_table) {
-            std::string table_name = format_table_name(tables_count);
-
-            // If such collection exists proceed to another one
-            has_table = mongo_database.has_collection(table_name);
-
-            if (has_table == false && tables_count > 1) {
-                // In this case use the last found collection
-                break;
-            }
-
-            std::shared_ptr<mongocxx::collection> table_ptr(new mongocxx::collection(mongo_database[table_name]));
-            blocks_tables.push_back(table_ptr);
-
-            ++tables_count;
-        }
-        if (!blocks_tables.empty()) {
-            active_blocks_table = *blocks_tables.back();
-        }
-    }
-
-    std::string mongo_db_writer::format_table_name(const size_t num) {
-        return std::string("Blocks_") + std::to_string(num);
     }
 
     void mongo_db_writer::on_block(const signed_block& block) {
@@ -104,44 +74,22 @@ namespace mongo_db {
         }
     }
 
-    void mongo_db_writer::update_active_table() {
-        if (current_table_size >= max_table_size) {
-            current_table_size = 0;
-
-            std::string table_name = format_table_name(tables_count);
-            tables_count++;
-            std::shared_ptr<mongocxx::collection> table_ptr(new mongocxx::collection(mongo_database[table_name]));
-            blocks_tables.push_back(table_ptr);
-
-            active_blocks_table = *table_ptr;
-        }
-    }
-
     void mongo_db_writer::write_blocks() {
         if (_blocks.empty()) {
             return;
         }
-        mongocxx::bulk_write _bulk{bulk_opts};
 
-        const int blocks_to_write = _blocks.size();
         // Write all the blocks that has num less then last irreversible block
         while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
             auto head_iter = _blocks.begin();
-            write_block(head_iter->second, _bulk);
+            format_block(head_iter->second);
             _blocks.erase(head_iter);
         }
 
-        update_active_table();
-
-        if (!active_blocks_table.bulk_write(_bulk)) {
-            ilog("Failed to write blocks to Mongo DB");
-        }
-        else {
-            current_table_size += blocks_to_write;
-        }
+        write_data();
     }
 
-    void mongo_db_writer::write_block(const signed_block& block, mongocxx::bulk_write& _bulk) {
+    void mongo_db_writer::format_block(const signed_block& block) {
         auto doc = document {};
         // First write some general information from Block
         doc << "block_num"      << std::to_string(block.block_num())
@@ -151,27 +99,20 @@ namespace mongo_db {
             << "witness"        << block.witness
             << "created_at"     << fc::time_point::now();
 
-        array tran_arr;
         if (!block.transactions.empty()) {
             // Now write every transaction from Block
             for (const auto& trx : block.transactions) {
-                tran_arr << format_transaction(trx);
+                format_transaction(trx, doc);
             }
-            doc << transactions << tran_arr;
         }
-
-        mongocxx::model::insert_one insert_msg{doc.view()};
-        _bulk.append(insert_msg);
     }
 
-    document mongo_db_writer::format_transaction(const signed_transaction& tran) {
+    void mongo_db_writer::format_transaction(const signed_transaction& tran, document& doc) {
         // Write transaction general information
-        document doc;
         doc << "id"             << tran.id().str()
             << "ref_block_num"  << std::to_string(tran.ref_block_num)
             << "expiration"     << tran.expiration;
 
-        array oper_arr;
         if (!tran.operations.empty()) {
             // Write every operation in transaction
             for (const auto& op : tran.operations) {
@@ -179,10 +120,31 @@ namespace mongo_db {
                 operation_writer op_writer;
                 op.visit(op_writer);
 
-                oper_arr << op_writer.get_document();
+                operation_name op_name;
+                op.visit(op_name);
+
+                doc << "Operation" << op_writer.get_document();
+
+                if (_formatted_blocks.find(op_name.get_result()) == _formatted_blocks.end()) {
+                    std::shared_ptr<mongocxx::bulk_write> write(new mongocxx::bulk_write(bulk_opts));
+                    _formatted_blocks[op_name.get_result()] = write;
+                }
+                mongocxx::model::insert_one insert_msg{doc.view()};
+                _formatted_blocks[op_name.get_result()]->append(insert_msg);
             }
-            doc << operations << oper_arr;
         }
-        return doc;
+    }
+
+    void mongo_db_writer::write_data() {
+
+        for (auto oper : _formatted_blocks) {
+            const std::string& collection_name = oper.first;
+            mongocxx::collection _collection = mongo_database[collection_name];
+
+            if (!_collection.bulk_write(*oper.second)) {
+                ilog("Failed to write blocks to Mongo DB");
+            }
+        }
+        _formatted_blocks.clear();
     }
 }}}

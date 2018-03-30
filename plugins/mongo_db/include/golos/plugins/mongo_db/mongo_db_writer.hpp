@@ -37,10 +37,9 @@ namespace mongo_db {
 
         void init_table_names();
         void write_blocks();
-        std::string format_table_name(const size_t num);
-        void write_block(const signed_block& block, mongocxx::bulk_write& _bulk);
-        document format_transaction(const signed_transaction& tran);
-        void update_active_table();
+        void format_block(const signed_block& block);
+        void format_transaction(const signed_transaction& tran, document& doc);
+        void write_data();
 
         uint64_t processed_blocks = 0;
         uint64_t tables_count = 1;
@@ -56,14 +55,13 @@ namespace mongo_db {
         // Key = Block num, Value = block
         uint32_t last_irreversible_block_num;
         std::map<uint32_t, signed_block> _blocks;
+        std::map<std::string, std::shared_ptr<mongocxx::bulk_write> > _formatted_blocks;
 
         // Mongo connection members
         mongocxx::instance mongo_inst;
         mongocxx::database mongo_database;
         mongocxx::uri uri;
         mongocxx::client mongo_conn;
-        std::vector<std::shared_ptr<mongocxx::collection>> blocks_tables;
-        mongocxx::collection active_blocks_table;
         mongocxx::options::bulk_write bulk_opts;
 
         golos::chain::database &_db;
