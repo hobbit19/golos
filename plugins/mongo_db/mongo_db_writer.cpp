@@ -32,9 +32,9 @@ namespace mongo_db {
         try {
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
-            mongo_database = mongo_conn[db_name];
             db_name = uri.database().empty() ? "Golos" : uri.database();
-            init_tables();
+            mongo_database = mongo_conn[db_name];
+            init_table_names();
 
             bulk_opts.ordered(false);
             ilog("MongoDB plugin initialized.");
@@ -51,18 +51,25 @@ namespace mongo_db {
         }
     }
 
-    void mongo_db_writer::init_tables() {
+    void mongo_db_writer::init_table_names() {
 
         bool has_table = true;
 
         while (has_table) {
             std::string table_name = format_table_name(tables_count);
-            ++tables_count;
+
             // If such collection exists proceed to another one
             has_table = mongo_database.has_collection(table_name);
 
+            if (has_table == false && tables_count > 1) {
+                // In this case use the last found collection
+                break;
+            }
+
             std::shared_ptr<mongocxx::collection> table_ptr(new mongocxx::collection(mongo_database[table_name]));
             blocks_tables.push_back(table_ptr);
+
+            ++tables_count;
         }
         if (!blocks_tables.empty()) {
             active_blocks_table = *blocks_tables.back();
@@ -99,9 +106,10 @@ namespace mongo_db {
 
     void mongo_db_writer::update_active_table() {
         if (current_table_size >= max_table_size) {
+            current_table_size = 0;
 
-            tables_count++;
             std::string table_name = format_table_name(tables_count);
+            tables_count++;
             std::shared_ptr<mongocxx::collection> table_ptr(new mongocxx::collection(mongo_database[table_name]));
             blocks_tables.push_back(table_ptr);
 

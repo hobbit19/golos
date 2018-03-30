@@ -35,7 +35,7 @@ namespace mongo_db {
 
     private:
 
-        void init_tables();
+        void init_table_names();
         void write_blocks();
         std::string format_table_name(const size_t num);
         void write_block(const signed_block& block, mongocxx::bulk_write& _bulk);
