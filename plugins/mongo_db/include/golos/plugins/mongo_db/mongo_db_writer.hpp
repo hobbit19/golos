@@ -12,7 +12,11 @@
 #include <mongocxx/instance.hpp>
 #include <mongocxx/uri.hpp>
 
+
+#include <thread>
 #include <map>
+#include <mutex>
+#include <condition_variable>
 
 
 namespace golos {
@@ -27,7 +31,7 @@ namespace mongo_db {
     class mongo_db_writer final {
     public:
         mongo_db_writer();
-        ~mongo_db_writer() = default;
+        ~mongo_db_writer();
 
         bool initialize(const std::string& uri_str);
 
@@ -35,7 +39,7 @@ namespace mongo_db {
 
     private:
 
-        void init_table_names();
+        void worker_thread_entrypoint();
         void write_blocks();
         void format_block(const signed_block& block);
         void format_transaction(const signed_transaction& tran, document& doc);
@@ -56,6 +60,11 @@ namespace mongo_db {
         uint32_t last_irreversible_block_num;
         std::map<uint32_t, signed_block> _blocks;
         std::map<std::string, std::shared_ptr<mongocxx::bulk_write> > _formatted_blocks;
+
+        bool shut_down = false;
+        std::mutex data_mutex;
+        std::condition_variable data_cond;
+        std::unique_ptr<std::thread> worker_thread;
 
         // Mongo connection members
         mongocxx::instance mongo_inst;

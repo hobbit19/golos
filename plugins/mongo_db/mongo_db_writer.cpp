@@ -26,6 +26,14 @@ namespace mongo_db {
 
     mongo_db_writer::mongo_db_writer() :
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
+
+        worker_thread.reset(new std::thread(&mongo_db_writer::worker_thread_entrypoint, this));
+    }
+
+    mongo_db_writer::~mongo_db_writer() {
+        shut_down = true;
+        data_cond.notify_one();
+        worker_thread->join();
     }
 
     bool mongo_db_writer::initialize(const std::string& uri_str) {
@@ -50,18 +58,18 @@ namespace mongo_db {
         }
     }
 
-    void mongo_db_writer::on_block(const signed_block& block) {
-        try {
-            _blocks[block.block_num()] = block;
+    void mongo_db_writer::worker_thread_entrypoint() {
 
-            // Update last irreversible block number
-            last_irreversible_block_num = _db.last_non_undoable_block_num();
-            if (last_irreversible_block_num >= _blocks.begin()->first) {
-                // Having irreversible blocks. Writing em into Mongo.
+        try {
+
+            while (!shut_down) {
+
+                std::unique_lock<std::mutex> lock(data_mutex);
+                data_cond.wait(lock);
+
                 write_blocks();
             }
 
-            ++processed_blocks;
         }
         catch (fc::exception & ex) {
             ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
@@ -72,6 +80,21 @@ namespace mongo_db {
         catch (...) {
             ilog("Unknown exception in MongoDB");
         }
+    }
+
+    void mongo_db_writer::on_block(const signed_block& block) {
+        {
+            std::lock_guard<std::mutex> guard(data_mutex);
+            _blocks[block.block_num()] = block;
+        }
+        // Update last irreversible block number
+        last_irreversible_block_num = _db.last_non_undoable_block_num();
+        if (last_irreversible_block_num >= _blocks.begin()->first) {
+
+            data_cond.notify_one();
+        }
+
+        ++processed_blocks;
     }
 
     void mongo_db_writer::write_blocks() {
