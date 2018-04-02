@@ -84,8 +84,23 @@ namespace mongo_db {
 
     void mongo_db_writer::on_block(const signed_block& block) {
         {
-            std::lock_guard<std::mutex> guard(data_mutex);
-            _blocks[block.block_num()] = block;
+            if (data_mutex.try_lock()) {
+                try {
+                    if (!_blocks_buffer.empty()) {
+                        std::move(_blocks_buffer.begin(), _blocks_buffer.end(), std::inserter(_blocks, _blocks.end()));
+                        _blocks_buffer.clear();
+                    }
+                    _blocks[block.block_num()] = block;
+
+                    data_mutex.unlock();
+                }
+                catch (...) {
+                    data_mutex.unlock();
+                }
+            }
+            else {
+                _blocks_buffer[block.block_num()] = block;
+            }
         }
         // Update last irreversible block number
         last_irreversible_block_num = _db.last_non_undoable_block_num();

@@ -58,6 +58,7 @@ namespace mongo_db {
 
         // Key = Block num, Value = block
         uint32_t last_irreversible_block_num;
+        std::map<uint32_t, signed_block> _blocks_buffer;
         std::map<uint32_t, signed_block> _blocks;
         std::map<std::string, std::shared_ptr<mongocxx::bulk_write> > _formatted_blocks;
 
