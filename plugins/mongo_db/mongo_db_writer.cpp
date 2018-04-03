@@ -25,15 +25,16 @@ namespace mongo_db {
     const std::string mongo_db_writer::operations = "Operations";
 
     mongo_db_writer::mongo_db_writer() :
-            _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
-
-        worker_thread.reset(new std::thread(&mongo_db_writer::worker_thread_entrypoint, this));
+            _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()),
+            thread_pool_work(this->thread_pool_ios) {
+        thread_pool.create_thread(boost::bind(&boost::asio::io_service::run, &thread_pool_ios));
     }
 
     mongo_db_writer::~mongo_db_writer() {
-        shut_down = true;
-        data_cond.notify_one();
-        worker_thread->join();
+        ilog("Shutting down MongoDB plugin.");
+        thread_pool_ios.stop();
+        thread_pool.join_all();
+        ilog("Shutting down MongoDB plugin success.");
     }
 
     bool mongo_db_writer::initialize(const std::string& uri_str) {
@@ -42,7 +43,6 @@ namespace mongo_db {
             mongo_conn = mongocxx::client {uri};
             db_name = uri.database().empty() ? "Golos" : uri.database();
             mongo_database = mongo_conn[db_name];
-
             bulk_opts.ordered(false);
             ilog("MongoDB plugin initialized.");
 
@@ -58,55 +58,44 @@ namespace mongo_db {
         }
     }
 
-    void mongo_db_writer::worker_thread_entrypoint() {
-
-        try {
-
-            while (!shut_down) {
-
-                std::unique_lock<std::mutex> lock(data_mutex);
-                data_cond.wait(lock);
-
-                write_blocks();
-            }
-
-        }
-        catch (fc::exception & ex) {
-            ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
-        }
-        catch (mongocxx::exception & ex) {
-            ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
-        }
-        catch (...) {
-            ilog("Unknown exception in MongoDB");
-        }
-    }
-
     void mongo_db_writer::on_block(const signed_block& block) {
-        {
-            if (data_mutex.try_lock()) {
-                try {
-                    if (!_blocks_buffer.empty()) {
-                        std::move(_blocks_buffer.begin(), _blocks_buffer.end(), std::inserter(_blocks, _blocks.end()));
-                        _blocks_buffer.clear();
-                    }
-                    _blocks[block.block_num()] = block;
+        
+        if (data_mutex.try_lock()) {
+            try {
+                if (!_blocks_buffer.empty()) {
+                    std::move(_blocks_buffer.begin(), _blocks_buffer.end(), std::inserter(_blocks, _blocks.end()));
+                    _blocks_buffer.clear();
+                }
+                _blocks[block.block_num()] = block;
 
-                    data_mutex.unlock();
-                }
-                catch (...) {
-                    data_mutex.unlock();
-                }
+                data_mutex.unlock();
             }
-            else {
-                _blocks_buffer[block.block_num()] = block;
+            catch (...) {
+                data_mutex.unlock();
             }
         }
+        else {
+            _blocks_buffer[block.block_num()] = block;
+        }
+
         // Update last irreversible block number
         last_irreversible_block_num = _db.last_non_undoable_block_num();
         if (last_irreversible_block_num >= _blocks.begin()->first) {
-
-            data_cond.notify_one();
+            thread_pool_ios.post([this]() {
+                try {
+                    std::unique_lock<std::mutex> lock(data_mutex);
+                    write_blocks();
+                }
+                catch (fc::exception & ex) {
+                    ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
+                }
+                catch (mongocxx::exception & ex) {
+                    ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
+                }
+                catch (...) {
+                    ilog("Unknown exception in MongoDB");
+                }
+            });
         }
 
         ++processed_blocks;
@@ -177,12 +166,51 @@ namespace mongo_db {
 
         for (auto oper : _formatted_blocks) {
             const std::string& collection_name = oper.first;
-            mongocxx::collection _collection = mongo_database[collection_name];
+            mongocxx::collection _collection = get_active_collection(collection_name);
 
             if (!_collection.bulk_write(*oper.second)) {
                 ilog("Failed to write blocks to Mongo DB");
             }
         }
         _formatted_blocks.clear();
+    }
+
+    mongocxx::collection mongo_db_writer::get_active_collection(const std::string& coll_type) {
+        
+        return mongo_database[coll_type];
+        if (active_collections.find(coll_type) == active_collections.end()) {
+            std::string coll_name = coll_type + std::string("_1");
+            mongocxx::collection coll = mongo_database[coll_name];
+            active_collections[coll_type] = coll;
+            return coll;
+        }
+        else {
+            mongocxx::collection coll = active_collections[coll_type];
+            std::string coll_name = coll.name().to_string();
+
+            const int64_t coll_size = 0;//coll.count(bsoncxx::view_or_value(""));
+            if (coll_size > max_collection_size) {
+
+                std::string new_coll_name;
+
+                std::string::iterator iter = std::find(coll_name.begin(), coll_name.end(), '_');
+                if (iter != coll_name.end()) {
+                    // Always should be here
+                    std::string coll_num_str = std::string(iter + 1, coll_name.end());
+                    std::istringstream ss(coll_num_str);
+                    int coll_num = 0;
+                    ss >> coll_num;
+                    if (coll_num != 0) {
+                        new_coll_name = coll_name + std::to_string(coll_num + 1);
+                    }
+                }
+                mongocxx::collection coll = mongo_database[new_coll_name];
+                active_collections[coll_type] = coll;
+                return coll;
+            }
+            else {
+                return active_collections[coll_type];
+            }
+        }
     }
 }}}
