@@ -92,6 +92,10 @@ namespace golos {
                 impl():database_(appbase::app().get_plugin<chain::plugin>().db()){}
                 ~impl(){}
 
+                void startup() {
+                    follow_api_ = appbase::app().find_plugin<golos::plugins::follow::plugin>();
+                }
+
                 void on_operation(const operation_notification &note){
                     try {
                         /// plugins shouldn't ever throw
@@ -110,6 +114,21 @@ namespace golos {
 
                 golos::chain::database& database() const {
                     return database_;
+                }
+
+                share_type get_account_reputation(const account_name_type& account) const {
+                    if (!follow_api_) {
+                        return 0;
+                    }
+
+                    auto &rep_idx = database().get_index<follow::reputation_index>().indices().get<follow::by_account>();
+                    auto itr = rep_idx.find(account);
+
+                    if (rep_idx.end() != itr) {
+                        return itr->reputation;
+                    }
+
+                    return 0;
                 }
 
                 comment_object::id_type get_parent(const discussion_query &query) const {
@@ -136,7 +155,7 @@ namespace golos {
                         vstate.rshares = itr->rshares;
                         vstate.percent = itr->vote_percent;
                         vstate.time = itr->last_update;
-
+                        vstate.reputation = get_account_reputation(vo.name);
                         result.emplace_back(vstate);
                         ++itr;
                     }
@@ -253,6 +272,7 @@ namespace golos {
                 std::set<std::string> cache_languages;
             private:
                 golos::chain::database& database_;
+                golos::plugins::follow::plugin* follow_api_ = nullptr;
             };
 
 
@@ -273,7 +293,7 @@ namespace golos {
 
 
             void social_network_t::plugin_startup() {
-
+                pimpl->startup();
             }
 
             void social_network_t::plugin_shutdown() {
@@ -379,7 +399,11 @@ namespace golos {
                 select_content_replies(result, author, permlink);
                 for (std::size_t i = 0; i < result.size(); ++i) {
                     if (result[i].children > 0) {
+                        auto j = result.size();
                         select_content_replies(result, result[i].author, result[i].permlink);
+                        for (; j < result.size(); ++j) {
+                            result[i].replies.push_back(result[j].author + "/" + result[j].permlink);
+                        }
                     }
                 }
                 return result;
@@ -393,6 +417,7 @@ namespace golos {
                     return pimpl->get_all_content_replies(author, permlink);
                 });
             }
+
             boost::multiprecision::uint256_t to256(const fc::uint128_t &t) {
                 boost::multiprecision::uint256_t result(t.high_bits());
                 result <<= 65;
@@ -435,6 +460,8 @@ namespace golos {
 
                     d.pending_payout_value = asset(static_cast<uint64_t>(r2), pot.symbol);
                     d.total_pending_payout_value = asset(static_cast<uint64_t>(tpp), pot.symbol);
+
+                    d.author_reputation = get_account_reputation(d.author);
 
                 }
 
