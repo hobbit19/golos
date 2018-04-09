@@ -2,6 +2,7 @@
 #include <golos/protocol/block.hpp>
 #include <golos/chain/database.hpp>
 #include <golos/protocol/transaction.hpp>
+#include <golos/protocol/operations.hpp>
 
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
@@ -29,6 +30,7 @@ namespace mongo_db {
     using golos::protocol::signed_transaction;
     using bsoncxx::builder::stream::document;
     using bsoncxx::builder::stream::open_document;
+    using namespace golos::protocol;
 
     class mongo_db_writer final {
     public:
@@ -36,35 +38,44 @@ namespace mongo_db {
         ~mongo_db_writer();
 
         bool initialize(const std::string& uri_str);
+        void shutdown();
 
         void on_block(const signed_block& block);
 
     private:
 
         void write_blocks();
-        void format_block(const signed_block& block);
-        void format_transaction(const signed_transaction& tran, document& doc);
+        void write_raw_block(const signed_block& block);
+        void write_block_operations(const signed_block& block);
+
+        void format_block_info(const signed_block& block, document& doc);
+        void format_transaction_info(const signed_transaction& tran, document& doc);
+
         void write_data();
+
 
         mongocxx::collection get_active_collection(const std::string& collection_name);
 
+
         boost::asio::io_service thread_pool_ios;
-        boost::asio::io_service::work thread_pool_work;
         boost::thread_group& thread_pool = appbase::app().scheduler();
 
 
         uint64_t processed_blocks = 0;
         uint64_t max_collection_size = 1000000;
 
-        std::string db_name;
+
         static const std::string blocks;
         static const std::string transactions;
         static const std::string operations;
+
+        std::string db_name;
 
         // Key = Block num, Value = block
         uint32_t last_irreversible_block_num;
         std::map<uint32_t, signed_block> _blocks_buffer;
         std::map<uint32_t, signed_block> _blocks;
+        // Table name, bulk write
         std::map<std::string, std::shared_ptr<mongocxx::bulk_write> > _formatted_blocks;
         std::map<std::string, mongocxx::collection> active_collections;
 
