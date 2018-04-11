@@ -120,7 +120,7 @@ namespace mongo_db {
             auto head_iter = _blocks.begin();
 
             write_raw_block(head_iter->second);
-            //write_block_operations(head_iter->second);
+            write_block_operations(head_iter->second);
             _blocks.erase(head_iter);
         }
         write_data();
@@ -146,10 +146,21 @@ namespace mongo_db {
                 // Write every operation in transaction
                 for (const auto& op : tran.operations) {
 
-                    operation_writer op_writer;
-                    op.visit(op_writer);
+                    try {
+                        operation_writer op_writer;
+                        op.visit(op_writer);
 
-                    operations_array << op_writer.get_document();
+                        operations_array << op_writer.get_document();
+                    }
+                    catch (fc::exception& ex) {
+                        ilog("MongoDB write_raw_block fc::exception ${e}", ("e", ex.what()));
+                    }
+                    catch (mongocxx::exception& ex) {
+                        ilog("Mongodb write_raw_block Mongo exception ${e}", ("e", ex.what()));
+                    }
+                    catch (...) {
+                        ilog("Mongodb write_raw_block unknown exception ");
+                    }
                 }
 
                 tran_doc << operations << operations_array;

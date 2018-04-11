@@ -12,21 +12,27 @@
 #include <mongocxx/instance.hpp>
 #include <mongocxx/stdx.hpp>
 #include <mongocxx/uri.hpp>
+#include <libraries/chain/include/golos/chain/database.hpp>
 
 
 namespace golos {
 namespace plugins {
 namespace mongo_db {
 
+    using namespace golos::chain;
     using namespace golos::protocol;
     using bsoncxx::builder::stream::document;
 
     class operation_writer {
     public:
 
+        operation_writer();
+
         typedef void result_type;
 
         document& get_document();
+
+        void format_comment(const std::string& auth, const std::string& perm, document& comment_doc);
 
         void operator()(const vote_operation &op);
         void operator()(const comment_operation &op);
@@ -84,6 +90,7 @@ namespace mongo_db {
     private:
         void log_operation(const std::string& name);
         document data;
+        database &_db;
     };
 
     class operation_name {

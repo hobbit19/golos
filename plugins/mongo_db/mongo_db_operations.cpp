@@ -3,6 +3,9 @@
 #include <bsoncxx/builder/stream/array.hpp>
 #include <bsoncxx/builder/stream/value_context.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
+#include <thirdparty/appbase/include/appbase/plugin.hpp>
+#include <plugins/chain/include/golos/plugins/chain/plugin.hpp>
+#include <libraries/chain/include/golos/chain/comment_object.hpp>
 
 namespace golos {
 namespace plugins {
@@ -72,6 +75,10 @@ namespace mongo_db {
 
     /////////////////////////////////////////////////
 
+    operation_writer::operation_writer() :
+            _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
+    }
+
     document& operation_writer::get_document() {
         return data;
     }
@@ -80,14 +87,83 @@ namespace mongo_db {
         //ilog("MongoDB operation: ${p}", ("p", name));
     }
 
+    void operation_writer::format_comment(const std::string& auth, const std::string& perm, document& comment_doc) {
+
+        comment_object comment_obj =_db.get_comment(auth, perm);
+
+        format_value(comment_doc, "author", comment_obj.author);
+        format_value(comment_doc, "permlink", comment_obj.permlink.c_str());
+        format_value(comment_doc, "abs_rshares", comment_obj.abs_rshares);
+        format_value(comment_doc, "active", comment_obj.active.to_iso_string());
+        // "active_votes"
+        format_value(comment_doc, "allow_curation_rewards", (comment_obj.allow_curation_rewards ? "true" : "false"));
+        format_value(comment_doc, "allow_replies", (comment_obj.allow_replies ? "true" : "false"));
+        format_value(comment_doc, "allow_votes", (comment_obj.allow_votes ? "true" : "false"));
+        format_value(comment_doc, "author_rewards", comment_obj.author_rewards);
+        // "author_reputation" << ?
+        format_value(comment_doc, "body", comment_obj.body.c_str());
+        // "body_length" << ?
+        format_value(comment_doc, "cashout_time", comment_obj.cashout_time.to_iso_string());
+        format_value(comment_doc, "category", comment_obj.category.c_str());
+        format_value(comment_doc, "children", std::to_string(comment_obj.children));
+        format_value(comment_doc, "children_abs_rshares", std::to_string(comment_obj.children_abs_rshares.value));
+        format_value(comment_doc, "children_rshares2", std::to_string(comment_obj.children_rshares2.to_uint64()));
+        format_value(comment_doc, "created", comment_obj.created.to_iso_string());
+        comment_doc << "curator_payout_value" << format_asset(comment_obj.curator_payout_value);
+        format_value(comment_doc, "depth", std::to_string(comment_obj.depth));
+        format_value(comment_doc, "id", std::to_string(comment_obj.id._id));
+        format_value(comment_doc, "last_payout", comment_obj.last_payout.to_iso_string());
+        format_value(comment_doc, "last_update", comment_obj.last_update.to_iso_string());
+        comment_doc << "max_accepted_payout" << format_asset(comment_obj.max_accepted_payout);
+        format_value(comment_doc, "max_cashout_time", comment_obj.max_cashout_time.to_iso_string());
+
+        std::string comment_mode;
+        switch (comment_obj.mode) {
+            case first_payout:
+                comment_mode = "first_payout";
+                break;
+            case second_payout:
+                comment_mode = "second_payout";
+                break;
+            case archived:
+                comment_mode = "archived";
+                break;
+        }
+
+        format_value(comment_doc, "mode", comment_mode);
+        format_value(comment_doc, "net_rshares", std::to_string(comment_obj.net_rshares.value));
+        format_value(comment_doc, "net_votes", std::to_string(comment_obj.net_votes));
+        format_value(comment_doc, "parent_author", comment_obj.parent_author);
+        format_value(comment_doc, "parent_permlink", comment_obj.parent_permlink.c_str());
+        // pending_payout_value
+        format_value(comment_doc, "percent_steem_dollars", std::to_string(comment_obj.percent_steem_dollars));
+        // promoted
+        // reblogged_by
+        // replies
+        format_value(comment_doc, "reward_weight", std::to_string(comment_obj.reward_weight));
+        format_value(comment_doc, "root_comment", std::to_string(comment_obj.root_comment._id));
+        // root_title
+        // scanned
+        format_value(comment_doc, "title", comment_obj.title.c_str());
+        comment_doc << "total_payout_value" << format_asset(comment_obj.total_payout_value);
+        // total_pending_payout_value
+        format_value(comment_doc, "total_vote_weight", std::to_string(comment_obj.total_vote_weight));
+        // url
+        format_value(comment_doc, "vote_rshares", std::to_string(comment_obj.vote_rshares.value));
+        // last_reply
+        // last_reply_by
+    }
+
     void operation_writer::operator()(const vote_operation &op) {
         document body;
 
         log_operation("vote");
 
+        ilog("MongoDB retrieving comment from database ${t} ${b} ", ("t", op.author)("b", op.permlink));
+
+        format_comment(op.author, op.permlink, body);
+
         format_value(body, "voter", op.voter);
-        format_value(body, "author", op.author);
-        format_value(body, "permlink", op.permlink);
         format_value(body, "weight", std::to_string(op.weight));
 
         data << "vote" << body;
@@ -98,12 +174,8 @@ namespace mongo_db {
 
         log_operation("comment");
 
-        format_value(body, "parent_author", op.parent_author);
-        format_value(body, "parent_permlink", op.parent_permlink);
-        format_value(body, "author", op.author);
-        format_value(body, "permlink", op.permlink);
-        format_value(body, "title", op.title);
-        format_value(body, "body", op.body);
+        format_comment(op.author, op.permlink, body);
+
         format_value(body, "json_metadata", op.json_metadata);
 
         data << "comment" << body;
@@ -348,8 +420,7 @@ namespace mongo_db {
 
         log_operation("delete_comment");
 
-        format_value(body, "author", op.author);
-        format_value(body, "permlink", op.permlink);
+        format_comment(op.author, op.permlink, body);
 
         data << "delete_comment" << body;
     }
@@ -370,12 +441,7 @@ namespace mongo_db {
 
         log_operation("comment_options");
 
-        format_value(body, "author", op.author);
-        format_value(body, "permlink", op.permlink);
-        format_value(body, "max_accepted_payout", op.max_accepted_payout.to_string());
-        format_value(body, "percent_steem_dollars", std::to_string(op.percent_steem_dollars));
-        format_value(body, "allow_votes", (op.allow_votes ? std::string("true") : std::string("false")));
-        format_value(body, "allow_curation_rewards", (op.allow_curation_rewards ? std::string("true") : std::string("false")));
+        format_comment(op.author, op.permlink, body);
 
         data << "comment_options" << body;
     }
@@ -792,8 +858,7 @@ namespace mongo_db {
 
         log_operation("comment_payout_update");
 
-        format_value(body, "author", op.author);
-        format_value(body, "permlink", op.permlink);
+        format_comment(op.author, op.permlink, body);
 
         data << "comment_payout_update" << body;
     }
