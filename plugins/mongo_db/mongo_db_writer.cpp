@@ -119,8 +119,14 @@ namespace mongo_db {
         while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
             auto head_iter = _blocks.begin();
 
-            write_raw_block(head_iter->second);
-            write_block_operations(head_iter->second);
+            try {
+                write_raw_block(head_iter->second);
+                write_block_operations(head_iter->second);
+            }
+            catch (...) {
+                _blocks.erase(head_iter);
+                throw;
+            }
             _blocks.erase(head_iter);
         }
         write_data();
