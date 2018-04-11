@@ -120,7 +120,7 @@ namespace mongo_db {
             auto head_iter = _blocks.begin();
 
             write_raw_block(head_iter->second);
-            write_block_operations(head_iter->second);
+            //write_block_operations(head_iter->second);
             _blocks.erase(head_iter);
         }
         write_data();
@@ -131,9 +131,13 @@ namespace mongo_db {
         document block_doc;
         format_block_info(block, block_doc);
 
+        array transactions_array;
+
         // Now write every transaction from Block
         for (const auto& tran : block.transactions) {
-            format_transaction_info(tran, block_doc);
+
+            document tran_doc;
+            format_transaction_info(tran, tran_doc);
 
             if (!tran.operations.empty()) {
 
@@ -148,9 +152,13 @@ namespace mongo_db {
                     operations_array << op_writer.get_document();
                 }
 
-                block_doc << "Operations" << operations_array;
+                tran_doc << operations << operations_array;
             }
+
+            transactions_array << tran_doc;
         }
+
+        block_doc << transactions << transactions_array;
 
         if (_formatted_blocks.find(blocks) == _formatted_blocks.end()) {
             std::shared_ptr<mongocxx::bulk_write> write(new mongocxx::bulk_write(bulk_opts));
@@ -213,7 +221,8 @@ namespace mongo_db {
             const std::string& collection_name = oper.first;
             mongocxx::collection _collection = get_active_collection(collection_name);
 
-            if (!_collection.bulk_write(*oper.second)) {
+            bulk_ptr bulkp = oper.second;
+            if (!_collection.bulk_write(*bulkp)) {
                 ilog("Failed to write blocks to Mongo DB");
             }
         }

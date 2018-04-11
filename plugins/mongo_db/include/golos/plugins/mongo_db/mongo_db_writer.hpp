@@ -32,6 +32,8 @@ namespace mongo_db {
     using bsoncxx::builder::stream::open_document;
     using namespace golos::protocol;
 
+    using bulk_ptr = std::shared_ptr<mongocxx::bulk_write>;
+
     class mongo_db_writer final {
     public:
         mongo_db_writer();
@@ -76,7 +78,7 @@ namespace mongo_db {
         std::map<uint32_t, signed_block> _blocks_buffer;
         std::map<uint32_t, signed_block> _blocks;
         // Table name, bulk write
-        std::map<std::string, std::shared_ptr<mongocxx::bulk_write> > _formatted_blocks;
+        std::map<std::string, bulk_ptr> _formatted_blocks;
         std::map<std::string, mongocxx::collection> active_collections;
 
         std::mutex data_mutex;
