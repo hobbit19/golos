@@ -32,10 +32,6 @@ namespace mongo_db {
             return _db;
         }
 
-        void shutdown() {
-            writer.shutdown();
-        }
-
         mongo_db_writer writer;
         mongo_db_plugin &_my;
 
@@ -99,7 +95,6 @@ namespace mongo_db {
     void mongo_db_plugin::plugin_shutdown() {
         ilog("mongo_db plugin: plugin_shutdown() begin");
 
-        _my->shutdown();
         ilog("mongo_db plugin: plugin_shutdown() end");
     }
 

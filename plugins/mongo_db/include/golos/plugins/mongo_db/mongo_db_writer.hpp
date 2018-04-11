@@ -40,7 +40,6 @@ namespace mongo_db {
         ~mongo_db_writer();
 
         bool initialize(const std::string& uri_str);
-        void shutdown();
 
         void on_block(const signed_block& block);
 
@@ -57,10 +56,6 @@ namespace mongo_db {
 
 
         mongocxx::collection get_active_collection(const std::string& collection_name);
-
-
-        boost::asio::io_service thread_pool_ios;
-        boost::thread_group& thread_pool = appbase::app().scheduler();
 
 
         uint64_t processed_blocks = 0;

@@ -26,14 +26,6 @@ namespace mongo_db {
 
     mongo_db_writer::mongo_db_writer() :
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
-        //thread_pool.create_thread(boost::bind(&boost::asio::io_service::run, &thread_pool_ios));
-        //thread_pool_ios.run();
-    }
-
-    void mongo_db_writer::shutdown() {
-        ilog("Shutting down MongoDB plugin.");
-        //thread_pool_ios.stop();
-        //thread_pool.join_all();
     }
 
     mongo_db_writer::~mongo_db_writer() {
@@ -64,42 +56,25 @@ namespace mongo_db {
     void mongo_db_writer::on_block(const signed_block& block) {
 
         try {
-            /*if (data_mutex.try_lock()) {
-                try {
-                    if (!_blocks_buffer.empty()) {
-                        std::move(_blocks_buffer.begin(), _blocks_buffer.end(), std::inserter(_blocks, _blocks.end()));
-                        _blocks_buffer.clear();
-                    }*/
-                    _blocks[block.block_num()] = block;
-/*
-                    data_mutex.unlock();
-                }
-                catch (...) {
-                    data_mutex.unlock();
-                }
-            }
-            else {
-                _blocks_buffer[block.block_num()] = block;
-            }*/
+
+            _blocks[block.block_num()] = block;
 
             // Update last irreversible block number
             last_irreversible_block_num = _db.last_non_undoable_block_num();
             if (last_irreversible_block_num >= _blocks.begin()->first) {
-                //thread_pool_ios.post([this]() {
                 try {
-                    std::unique_lock<std::mutex> lock(data_mutex);
+
                     write_blocks();
                 }
-                catch (fc::exception & ex) {
-                    ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
+                catch (fc::exception &ex) {
+                    //ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
                 }
-                catch (mongocxx::exception & ex) {
-                    ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
+                catch (mongocxx::exception &ex) {
+                    //ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
                 }
                 catch (...) {
                     ilog("Unknown exception in MongoDB");
                 }
-                //});
             }
 
             ++processed_blocks;

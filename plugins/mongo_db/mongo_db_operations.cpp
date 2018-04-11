@@ -159,8 +159,6 @@ namespace mongo_db {
 
         log_operation("vote");
 
-        ilog("MongoDB retrieving comment from database ${t} ${b} ", ("t", op.author)("b", op.permlink));
-
         format_comment(op.author, op.permlink, body);
 
         format_value(body, "voter", op.voter);
