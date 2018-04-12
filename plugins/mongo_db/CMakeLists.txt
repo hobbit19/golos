@@ -51,6 +51,7 @@ if (libmongoc-1.0_FOUND)
           golos::json_rpc
           golos_chain
           golos::chain_plugin
+          golos::follow
           appbase
           fc
           ${LIBBSONCXX_LIBRARIES}

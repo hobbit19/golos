@@ -1,11 +1,14 @@
 #include <golos/plugins/mongo_db/mongo_db_operations.hpp>
+#include <golos/plugins/follow/follow_objects.hpp>
+#include <golos/plugins/chain/plugin.hpp>
+#include <golos/chain/comment_object.hpp>
+#include <golos/chain/account_object.hpp>
 
 #include <bsoncxx/builder/stream/array.hpp>
 #include <bsoncxx/builder/stream/value_context.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
-#include <thirdparty/appbase/include/appbase/plugin.hpp>
-#include <plugins/chain/include/golos/plugins/chain/plugin.hpp>
-#include <libraries/chain/include/golos/chain/comment_object.hpp>
+#include <appbase/plugin.hpp>
+
 
 namespace golos {
 namespace plugins {
@@ -13,6 +16,7 @@ namespace mongo_db {
 
     using bsoncxx::builder::stream::array;
     using bsoncxx::builder::stream::document;
+    using namespace golos::plugins::follow;
 
     // Helper functions
     document format_authority(const authority& auth) {
@@ -95,14 +99,14 @@ namespace mongo_db {
         format_value(comment_doc, "permlink", comment_obj.permlink.c_str());
         format_value(comment_doc, "abs_rshares", comment_obj.abs_rshares);
         format_value(comment_doc, "active", comment_obj.active.to_iso_string());
-        // "active_votes"
+        format_comment_active_votes(comment_obj, comment_doc);
         format_value(comment_doc, "allow_curation_rewards", (comment_obj.allow_curation_rewards ? "true" : "false"));
         format_value(comment_doc, "allow_replies", (comment_obj.allow_replies ? "true" : "false"));
         format_value(comment_doc, "allow_votes", (comment_obj.allow_votes ? "true" : "false"));
         format_value(comment_doc, "author_rewards", comment_obj.author_rewards);
-        // "author_reputation" << ?
+        format_value(comment_doc, "author_reputation", get_account_reputation(comment_obj.author));
         format_value(comment_doc, "body", comment_obj.body.c_str());
-        // "body_length" << ?
+        format_value(comment_doc, "body_length", std::to_string(comment_obj.body.length()));
         format_value(comment_doc, "cashout_time", comment_obj.cashout_time.to_iso_string());
         format_value(comment_doc, "category", comment_obj.category.c_str());
         format_value(comment_doc, "children", std::to_string(comment_obj.children));
@@ -152,6 +156,47 @@ namespace mongo_db {
         format_value(comment_doc, "vote_rshares", std::to_string(comment_obj.vote_rshares.value));
         // last_reply
         // last_reply_by
+    }
+
+    void operation_writer::format_comment_active_votes(const comment_object& comment, document& doc) {
+
+        array votes;
+
+        const auto &idx = _db.get_index<comment_vote_index>().indices().get<by_comment_voter>();
+        comment_object::id_type cid(comment.id);
+        auto itr = idx.lower_bound(cid);
+
+        while (itr != idx.end() && itr->comment == cid) {
+
+            document vote_doc;
+
+            const auto &vo = _db.get(itr->voter);
+
+            format_value(vote_doc, "voter", vo.name);
+            format_value(vote_doc, "weight", std::to_string(itr->weight));
+            format_value(vote_doc, "rshares", std::to_string(itr->rshares));
+            format_value(vote_doc, "percent", std::to_string(itr->vote_percent));
+            format_value(vote_doc, "time", itr->last_update.to_iso_string());
+            format_value(vote_doc, "reputation", get_account_reputation(vo.name));
+
+            votes << vote_doc;
+
+            ++itr;
+        }
+
+        doc << "active_votes" << votes;
+    }
+
+    std::string operation_writer::get_account_reputation(const account_name_type& account) {
+
+        auto &rep_idx = _db.get_index<reputation_index>().indices().get<by_account>();
+        auto itr = rep_idx.find(account);
+
+        if (rep_idx.end() != itr) {
+            return itr->reputation;
+        }
+
+        return "0";
     }
 
     void operation_writer::operator()(const vote_operation &op) {

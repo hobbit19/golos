@@ -33,6 +33,9 @@ namespace mongo_db {
         document& get_document();
 
         void format_comment(const std::string& auth, const std::string& perm, document& comment_doc);
+        void format_comment_active_votes(const comment_object& comm, document& doc);
+        std::string get_account_reputation(const account_name_type& account);
+
 
         void operator()(const vote_operation &op);
         void operator()(const comment_operation &op);
