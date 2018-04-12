@@ -93,10 +93,16 @@ namespace mongo_db {
 
     void operation_writer::format_comment(const std::string& auth, const std::string& perm, document& comment_doc) {
 
-        const comment_object* comment_obj_ptr =_db.find_comment(auth, perm);
-        if (comment_obj_ptr == NULL) {
-            return;
-        }
+        const comment_object* comment_obj_ptr;
+
+        _db.with_read_lock([&](){
+            comment_obj_ptr =_db.find_comment(auth, perm);
+
+            if (comment_obj_ptr == NULL) {
+                return;
+            }
+        });
+
         comment_object comment_obj = *comment_obj_ptr;
 
         format_value(comment_doc, "author", comment_obj.author);
