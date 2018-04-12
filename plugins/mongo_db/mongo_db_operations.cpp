@@ -107,7 +107,7 @@ namespace mongo_db {
         format_value(comment_doc, "category", comment_obj.category.c_str());
         format_value(comment_doc, "children", std::to_string(comment_obj.children));
         format_value(comment_doc, "children_abs_rshares", std::to_string(comment_obj.children_abs_rshares.value));
-        format_value(comment_doc, "children_rshares2", std::to_string(comment_obj.children_rshares2.to_uint64()));
+        format_value(comment_doc, "children_rshares2", comment_obj.children_rshares2);
         format_value(comment_doc, "created", comment_obj.created.to_iso_string());
         comment_doc << "curator_payout_value" << format_asset(comment_obj.curator_payout_value);
         format_value(comment_doc, "depth", std::to_string(comment_obj.depth));

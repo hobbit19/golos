@@ -134,8 +134,7 @@ namespace mongo_db {
                         operations_array << op_writer.get_document();
                     }
                     catch (fc::exception& ex) {
-                        // Too many exceptions here when retrieving comment info from database
-                        //ilog("MongoDB write_raw_block fc::exception ${e}", ("e", ex.what()));
+                        ilog("MongoDB write_raw_block fc::exception ${e}", ("e", ex.what()));
                     }
                     catch (mongocxx::exception& ex) {
                         ilog("Mongodb write_raw_block Mongo exception ${e}", ("e", ex.what()));
