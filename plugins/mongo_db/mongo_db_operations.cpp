@@ -93,7 +93,11 @@ namespace mongo_db {
 
     void operation_writer::format_comment(const std::string& auth, const std::string& perm, document& comment_doc) {
 
-        comment_object comment_obj =_db.get_comment(auth, perm);
+        const comment_object* comment_obj_ptr =_db.find_comment(auth, perm);
+        if (comment_obj_ptr == NULL) {
+            return;
+        }
+        comment_object comment_obj = *comment_obj_ptr;
 
         format_value(comment_doc, "author", comment_obj.author);
         format_value(comment_doc, "permlink", comment_obj.permlink.c_str());
