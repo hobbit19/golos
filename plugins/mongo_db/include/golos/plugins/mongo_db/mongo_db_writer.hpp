@@ -39,7 +39,7 @@ namespace mongo_db {
         mongo_db_writer();
         ~mongo_db_writer();
 
-        bool initialize(const std::string& uri_str);
+        bool initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op);
 
         void on_block(const signed_block& block);
 
@@ -76,8 +76,8 @@ namespace mongo_db {
         std::map<std::string, bulk_ptr> _formatted_blocks;
         std::map<std::string, mongocxx::collection> active_collections;
 
-        std::mutex data_mutex;
-        std::unique_ptr<std::thread> worker_thread;
+        bool write_raw_blocks;
+        std::vector<std::string> write_operations;
 
         // Mongo connection members
         mongocxx::instance mongo_inst;

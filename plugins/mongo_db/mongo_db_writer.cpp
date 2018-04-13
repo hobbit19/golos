@@ -31,13 +31,15 @@ namespace mongo_db {
     mongo_db_writer::~mongo_db_writer() {
     }
 
-    bool mongo_db_writer::initialize(const std::string& uri_str) {
+    bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op) {
         try {
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
             db_name = uri.database().empty() ? "Golos" : uri.database();
             mongo_database = mongo_conn[db_name];
             bulk_opts.ordered(false);
+            write_raw_blocks = write_raw;
+            write_operations = op;
 
             ilog("MongoDB plugin initialized.");
 
@@ -63,7 +65,6 @@ namespace mongo_db {
             last_irreversible_block_num = _db.last_non_undoable_block_num();
             if (last_irreversible_block_num >= _blocks.begin()->first) {
                 try {
-
                     write_blocks();
                 }
                 catch (fc::exception &ex) {
@@ -95,7 +96,10 @@ namespace mongo_db {
             auto head_iter = _blocks.begin();
 
             try {
-                write_raw_block(head_iter->second);
+                if (write_raw_blocks) {
+                    write_raw_block(head_iter->second);
+                }
+
                 write_block_operations(head_iter->second);
             }
             catch (...) {
@@ -108,6 +112,8 @@ namespace mongo_db {
     }
 
     void mongo_db_writer::write_raw_block(const signed_block& block) {
+
+        //ilog("mongo_db_writer::write_raw_block");
 
         document block_doc;
         format_block_info(block, block_doc);
@@ -138,6 +144,9 @@ namespace mongo_db {
                     }
                     catch (mongocxx::exception& ex) {
                         ilog("Mongodb write_raw_block Mongo exception ${e}", ("e", ex.what()));
+                    }
+                    catch (std::exception& ex) {
+                        ilog("Mongodb write_raw_block std exception ${e}", ("e", ex.what()));
                     }
                     catch (...) {
                         ilog("Mongodb write_raw_block unknown exception ");
@@ -173,6 +182,11 @@ namespace mongo_db {
 
                 operation_name op_name;
                 op.visit(op_name);
+
+                auto iter = std::find(write_operations.begin(), write_operations.end(), op_name.get_result());
+                if (!write_operations.empty() && iter == write_operations.end()) {
+                    continue;
+                }
 
                 document& doc = op_writer.get_document();
                 format_transaction_info(tran, doc);

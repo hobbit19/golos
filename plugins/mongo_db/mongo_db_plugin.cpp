@@ -18,8 +18,8 @@ namespace mongo_db {
                   _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
         }
 
-        bool initialize(const std::string& uri) {
-            return writer.initialize(uri);
+        bool initialize(const std::string& uri, const bool write_raw, const std::vector<std::string>& op) {
+            return writer.initialize(uri, write_raw, op);
         }
 
         ~mongo_db_plugin_impl() = default;
@@ -53,11 +53,31 @@ namespace mongo_db {
                  boost::program_options::value<string>()->default_value("mongodb://172.17.0.1:27017/Golos"),
                 "Mongo DB connection string");
         cfg.add(cli);
+        cli.add_options()
+                ("mongodb-write-raw-blocks",
+                 boost::program_options::value<bool>()->default_value(true),
+                 "Write raw blocks into mongo or not");
+        std::vector<string> vec;
+        vec.push_back("comment");
+        cli.add_options()
+                ("mongodb-write-operations",
+                 boost::program_options::value<std::vector<std::string>>()->multitoken()->zero_tokens()->composing(),
+                 "List of operations to write into mongo");
+        cfg.add(cli);
     }
 
     void mongo_db_plugin::plugin_initialize(const boost::program_options::variables_map &options) {
         try {
             ilog("mongo_db plugin: plugin_initialize() begin");
+
+            bool raw_blocks = true;
+            if (options.count("mongodb-write-raw-blocks")) {
+                raw_blocks = options.at("mongodb-write-raw-blocks").as<bool>();
+            }
+            std::vector<std::string> write_operations;
+            if (options.count("mongodb-write-operations")) {
+                write_operations = options.at("mongodb-write-operations").as<std::vector<std::string>>();
+            }
 
             // First init mongo db
             if (options.count("mongodb-uri")) {
@@ -66,7 +86,7 @@ namespace mongo_db {
 
                 _my.reset(new mongo_db_plugin_impl(*this));
 
-                if (!_my->initialize(uri_str)) {
+                if (!_my->initialize(uri_str, raw_blocks, write_operations)) {
                     ilog("Cannot initialize MongoDB plugin. Plugin disabled.");
                     _my.reset();
                     return;
