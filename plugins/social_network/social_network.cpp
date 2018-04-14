@@ -1,17 +1,14 @@
 #include <boost/program_options/options_description.hpp>
 #include <golos/plugins/social_network/social_network.hpp>
 #include <golos/plugins/social_network/tag/tags_object.hpp>
-#include <golos/plugins/social_network/languages/language_object.hpp>
 #include <golos/chain/index.hpp>
 #include <golos/plugins/social_network/api_object/discussion.hpp>
 #include <golos/plugins/social_network/api_object/discussion_query.hpp>
 #include <golos/plugins/social_network/api_object/vote_state.hpp>
-#include <golos/plugins/social_network/languages/language_object.hpp>
 #include <golos/chain/steem_objects.hpp>
 
 // These visitors creates additional tables, we don't really need them in LOW_MEM mode
 #include <golos/plugins/social_network/tag/tag_visitor.hpp>
-#include <golos/plugins/social_network/languages/language_visitor.hpp>
 #include <golos/chain/operation_notification.hpp>
 
 #define CHECK_ARG_SIZE(_S)                                 \
@@ -44,7 +41,6 @@ namespace golos { namespace plugins { namespace social_network {
 #ifndef IS_LOW_MEM
             try {
                 /// plugins shouldn't ever throw
-                note.op.visit(languages::operation_visitor(database(), cache_languages));
                 note.op.visit(tags::operation_visitor(database()));
             } catch (const fc::exception& e) {
                 edump((e.to_detail_string()));
@@ -103,11 +99,11 @@ namespace golos { namespace plugins { namespace social_network {
             }
         }
 
-        bool filter_tags(discussion_query& query) const;
+        bool filter_tags(const tags::tag_type type, std::set<std::string>& select_tags) const;
 
-        bool filter_languages(discussion_query& query) const;
+        bool filter_authors(discussion_query& query) const;
 
-        std::set<account_object::id_type> filter_authors(const discussion_query& query) const;
+        bool filter_query(discussion_query& query) const;
 
         template<
             typename DatabaseIndex,
@@ -120,20 +116,21 @@ namespace golos { namespace plugins { namespace social_network {
         ) const;
 
         template<
-            typename DatabaseIndex,
-            typename CommentIndex,
-            typename DiscussionIndex,
-            typename Selector>
-        std::vector<discussion> select_ordered_discussions(
-            discussion_query& query,
-            const std::set<std::string>& select_set,
-            const std::set<std::string>& filter_set,
-            Selector&& selector
+            typename Iterator,
+            typename Select,
+            typename Exit>
+        void select_discussions(
+            std::set<comment_object::id_type>& id_set,
+            std::vector<discussion>& result,
+            const discussion_query& query,
+            Iterator itr,
+            Iterator etr,
+            Select&& select,
+            Exit&& exit
         ) const;
 
         template<
-            typename TagsIndex,
-            typename LanguageIndex,
+            typename DiscussionOrder,
             typename Selector>
         std::vector<discussion> select_ordered_discussions(discussion_query&, Selector&&) const;
 
@@ -174,19 +171,15 @@ namespace golos { namespace plugins { namespace social_network {
 
         void fill_discussion(discussion& d, const discussion_query& query) const;
 
-        get_languages_r get_languages();
-
-        std::set<std::string> cache_languages;
+        get_languages_result get_languages();
 
     private:
         golos::chain::database& database_;
     };
 
 
-    get_languages_r social_network::impl::get_languages() {
-        get_languages_r result;
-        result.languages = cache_languages;
-        return result;
+    get_languages_result social_network::impl::get_languages() {
+        return get_languages_result({});
     }
 
     void social_network::impl::fill_discussion(discussion& d, const discussion_query& query) const {
@@ -216,11 +209,8 @@ namespace golos { namespace plugins { namespace social_network {
     }
 
     DEFINE_API(social_network, get_languages) {
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            get_languages_r result;
-            result = pimpl->get_languages();
-            return result;
+        return pimpl->database().with_weak_read_lock([&]() {
+            return pimpl->get_languages();
         });
     }
 
@@ -246,7 +236,7 @@ namespace golos { namespace plugins { namespace social_network {
 
     void social_network::plugin_initialize(const boost::program_options::variables_map& options) {
         pimpl.reset(new impl());
-// Disable index creation for tag and language visitors
+// Disable index creation for tag visitor
 #ifndef IS_LOW_MEM
         auto& db = pimpl->database();
         db.post_apply_operation.connect([&](const operation_notification& note) {
@@ -254,13 +244,8 @@ namespace golos { namespace plugins { namespace social_network {
         });
         add_plugin_index<tags::tag_index>(db);
         add_plugin_index<tags::tag_stats_index>(db);
-        add_plugin_index<tags::peer_stats_index>(db);
         add_plugin_index<tags::author_tag_stats_index>(db);
-
-        add_plugin_index<languages::language_index>(db);
-        add_plugin_index<languages::language_stats_index>(db);
-        add_plugin_index<languages::peer_stats_index>(db);
-        add_plugin_index<languages::author_language_stats_index>(db);
+        add_plugin_index<tags::language_index>(db);
 #endif
         JSON_RPC_REGISTER_API (name());
 
@@ -283,7 +268,7 @@ namespace golos { namespace plugins { namespace social_network {
 
     void social_network::impl::set_url(discussion& d) const {
         const comment_api_object root(database().get<comment_object, by_id>(d.root_comment));
-        d.url = "/" + root.category + "/@" + root.author + "/" + root.permlink;
+        d.url = std::string("/") + root.category + "/@" + root.author + "/" + root.permlink;
         d.root_title = root.title;
         if (root.id != d.id) {
             d.url += "#@" + d.author + "/" + d.permlink;
@@ -357,7 +342,6 @@ namespace golos { namespace plugins { namespace social_network {
         result += t.low_bits();
         return result;
     }
-
 
     void social_network::impl::set_pending_payout(discussion& d) const {
         auto& db = database();
@@ -475,35 +459,27 @@ namespace golos { namespace plugins { namespace social_network {
         });
     }
 
-    inline bool is_good_language(const discussion_query& query, const discussion& d) {
-        if (query.select_languages.empty() && query.filter_languages.empty()) {
-            return true;
-        }
-
-        auto language = languages::get_language(d);
-
-        if (!query.select_languages.empty() && !query.select_languages.count(language)) {
-            return false;
-        }
-
-        if (!query.filter_languages.empty() && query.filter_languages.count(language)) {
-            return false;
-        }
-
-        return true;
-    }
-
     inline bool is_good_tags(const discussion_query& query, const discussion& d) {
-        if (query.select_tags.empty() && query.filter_tags.empty()) {
+        if (query.select_tags.empty() &&
+            query.filter_tags.empty() &&
+            query.select_languages.empty() &&
+            query.filter_languages.empty()
+        ) {
             return true;
         }
 
-        auto tags = tags::get_tags(d);
+        auto meta = tags::get_metadata(d);
+        if ((!query.select_languages.empty() && !query.select_languages.count(meta.language)) ||
+            (!query.filter_languages.empty() && query.filter_languages.count(meta.language))
+        ) {
+            return false;
+        }
+
         bool result = query.select_tags.empty();
-        for (auto& t: tags) {
-            if (!query.filter_tags.empty() && query.filter_tags.count(t)) {
+        for (auto& name: meta.tags) {
+            if (!query.filter_tags.empty() && query.filter_tags.count(name)) {
                 return false;
-            } else if (!result && query.select_tags.count(t)) {
+            } else if (!result && query.select_tags.count(name)) {
                 result = true;
             }
         }
@@ -511,58 +487,66 @@ namespace golos { namespace plugins { namespace social_network {
         return result;
     }
 
-    bool social_network::impl::filter_tags(discussion_query& query) const {
-        if (query.select_tags.empty()) {
+    bool social_network::impl::filter_tags(const tags::tag_type type, std::set<std::string>& select_tags) const {
+        if (select_tags.empty()) {
             return true;
         }
 
         auto& db = database();
-        auto& idx = db.get_index<tags::tag_index>().indices().get<tags::by_parent_created>();
-        std::set<std::string> exists_tags;
-        for (auto& t: query.select_tags) {
-            if (idx.find(t) != idx.end()) {
-                exists_tags.insert(t);
+        auto& idx = db.get_index<tags::tag_index>().indices().get<tags::by_tag>();
+        auto src_tags = std::move(select_tags);
+        for (const auto& name: src_tags) {
+            if (idx.find(std::make_tuple(name, type)) != idx.end()) {
+                select_tags.insert(name);
             }
         }
-        if (exists_tags.empty()) {
-            return false;
-        }
-
-        query.select_tags.swap(exists_tags);
-        return true;
+        return !select_tags.empty();
     }
 
-    bool social_network::impl::filter_languages(discussion_query& query) const {
-        if (query.select_languages.empty()) {
+    bool social_network::impl::filter_authors(discussion_query& query) const {
+        if (query.select_authors.empty()) {
             return true;
         }
 
         auto& db = database();
-        auto& idx = db.get_index<languages::language_index>().indices().get<languages::by_parent_created>();
-        std::set<std::string> exists_languages;
-        for (auto& t: query.select_languages) {
-            if (idx.find(t) != idx.end()) {
-                exists_languages.insert(t);
-            }
-        }
-        if (exists_languages.empty()) {
-            return false;
-        }
-
-        query.select_languages.swap(exists_languages);
-        return true;
-    }
-
-    std::set<account_object::id_type> social_network::impl::filter_authors(const discussion_query& query) const {
-        auto& db = database();
-        std::set<account_object::id_type> exists_authors;
         for (auto& name: query.select_authors) {
             auto* author = db.find_account(name);
             if (author) {
-                exists_authors.insert(author->id);
+                query.select_author_ids.insert(author->id);
             }
         }
-        return exists_authors;
+        return !query.select_author_ids.empty();
+    }
+
+    bool social_network::impl::filter_query(discussion_query& query) const {
+        if (query.start_author && !query.select_authors.empty() && !query.select_authors.count(*query.start_author)) {
+            return false;
+        }
+
+        auto& db = database();
+        if (query.start_author) {
+            auto* comment = db.find_comment(*query.start_author, *query.start_permlink);
+            if (!comment) {
+                return false;
+            }
+            query.comment = comment->id;
+        }
+
+        if (query.parent_author) {
+            auto* comment = db.find_comment(*query.parent_author, *query.parent_permlink);
+            if (!comment) {
+                return false;
+            }
+            query.parent = comment->id;
+        }
+
+        if (!filter_tags(tags::tag_type::language, query.select_languages) ||
+            !filter_tags(tags::tag_type::tag, query.select_tags) ||
+            !filter_authors(query)
+        ) {
+            return false;
+        }
+        return true;
     }
 
     template<
@@ -576,31 +560,18 @@ namespace golos { namespace plugins { namespace social_network {
     ) const {
         std::vector<discussion> result;
 
-        // check existing tags and languages
-        if (!filter_tags(query) || !filter_languages(query)) {
+        if (!filter_query(query)) {
             return result;
         }
 
         auto& db = database();
-
-        // author_set is not used in select for-loop, but it allows to skip selecting if all nicks doesn't exist
-        auto author_set = filter_authors(query);
-        if (query.select_authors.empty() != author_set.empty()) {
-            return result;
-        }
-
         const auto& indices = db.get_index<DatabaseIndex>().indices();
         const auto& idx = indices.template get<DiscussionIndex>();
         auto itr = idx.begin();
         // seek to start comment
-        if (query.start_author && query.start_permlink) {
-            const auto* comment = db.find_comment(*query.start_author, *query.start_permlink);
-            if (!comment) {
-                return result;
-            }
-
+        if (query.comment._id) {
             const auto& cidx = indices.template get<CommentIndex>();
-            const auto citr = cidx.find(comment->id);
+            const auto citr = cidx.find(query.comment);
             if (citr == cidx.end()) {
                 return result;
             }
@@ -610,15 +581,15 @@ namespace golos { namespace plugins { namespace social_network {
 
         result.reserve(query.limit);
 
-        uint32_t depth = 0;
         std::set<comment_object::id_type> id_set;
-        auto id_limit = query.start + query.limit;
-        for (auto etr = idx.end(); itr != etr && id_set.size() < id_limit && depth < query.depth; ++itr, ++depth) {
+        for (auto etr = idx.end(); itr != etr && result.size() < query.limit; ++itr) {
             const auto* comment = getter(*itr);
+            if (!comment || id_set.count(comment->id)) {
+                continue;
+            }
+            id_set.insert(comment->id);
 
-            if (!comment ||
-                id_set.count(comment->id) ||
-                (!query.select_authors.empty() && !query.select_authors.count(comment->author)) ||
+            if ((!query.select_authors.empty() && !query.select_authors.count(comment->author)) ||
                 (query.parent_author && *query.parent_author != comment->parent_author) ||
                 (query.parent_permlink && *query.parent_permlink != to_string(comment->parent_permlink))
             ) {
@@ -626,12 +597,7 @@ namespace golos { namespace plugins { namespace social_network {
             }
 
             discussion d(*comment);
-            if (!is_good_language(query, d) || !is_good_tags(query, d)) {
-                continue;
-            }
-
-            id_set.insert(d.id);
-            if (id_set.size() <= query.start) {
+            if (!is_good_tags(query, d)) {
                 continue;
             }
 
@@ -642,110 +608,147 @@ namespace golos { namespace plugins { namespace social_network {
     }
 
     template<
-        typename DatabaseIndex,
-        typename CommentIndex,
-        typename DiscussionIndex,
-        typename Selector>
-    std::vector<discussion> social_network::impl::select_ordered_discussions(
-        discussion_query& query,
-        const std::set<std::string>& select_set,
-        const std::set<std::string>& filter_set,
-        Selector&& selector
+        typename Iterator,
+        typename Select,
+        typename Exit>
+    void social_network::impl::select_discussions(
+        std::set<comment_object::id_type>& id_set,
+        std::vector<discussion>& result,
+        const discussion_query& query,
+        Iterator itr,
+        Iterator etr,
+        Select&& select,
+        Exit&& exit
     ) const {
-        std::vector<discussion> result;
-
-        // check existing tags and languages
-        if (!filter_tags(query) || !filter_languages(query)) {
-            return result;
-        }
-
         auto& db = database();
-
-        auto author_set = filter_authors(query);
-        // check existing of authors
-        if (query.select_authors.empty() != author_set.empty()) {
-            return result;
-        }
-
-        const auto& indices = db.get_index<DatabaseIndex>().indices();
-        const auto& idx = indices.template get<DiscussionIndex>();
-        auto itr = idx.begin();
-        // seek to start comment
-        if (query.start_author && query.start_permlink) {
-            const auto* comment = db.find_comment(*query.start_author, *query.start_permlink);
-            if (!comment) {
-                return result;
+        for (; itr != etr && !exit(*itr); ++itr) {
+            if (id_set.count(itr->comment)) {
+                continue;
             }
+            id_set.insert(itr->comment);
 
-            const auto& cidx = indices.template get<CommentIndex>();
-            const auto citr = cidx.find(comment->id);
-            if (citr == cidx.end()) {
-                return result;
-            }
-
-            itr = idx.iterator_to(*citr);
-        }
-
-        comment_object::id_type parent;
-        if (query.parent_author && query.parent_permlink) {
-            auto* parent_comment = db.find_comment(*query.parent_author, *query.parent_permlink);
-            if (parent_comment) {
-                return result;
-            }
-            parent = parent_comment->id;
-        }
-
-        result.reserve(query.limit);
-
-        uint32_t depth = 0;
-        std::set<comment_object::id_type> id_set;
-        auto id_limit = query.start + query.limit;
-        for (auto etr = idx.end(); itr != etr && id_set.size() < id_limit && depth < query.depth; ++itr, ++depth) {
-            if (id_set.count(itr->comment) ||
-                (parent._id && itr->parent != parent) ||
-                (!author_set.empty() && !author_set.count(itr->author)) ||
-                (!select_set.empty() && !select_set.count(itr->name)) ||
-                (!filter_set.empty() && filter_set.count(itr->name))
-            ) {
+            if ((query.parent._id && itr->parent != query.parent) ||
+                (!query.select_author_ids.empty() && !query.select_author_ids.count(itr->author))
+                ) {
                 continue;
             }
 
-            auto* comment = db.find(itr->comment);
+            const auto* comment = db.find(itr->comment);
             if (!comment) {
                 continue;
             }
 
             discussion d(*comment);
-            if (!selector(d) || !is_good_language(query, d) || !is_good_tags(query, d)) {
-                continue;
-            }
-
-            id_set.insert(d.id);
-            if (id_set.size() < query.start) {
+            if (!select(d) || !is_good_tags(query, d)) {
                 continue;
             }
 
             fill_discussion(d, query);
-            result.push_back(d);
+            d.promoted = itr->promoted_balance;
+            d.hot = itr->hot;
+            d.trending = itr->trending;
+            result.push_back(std::move(d));
         }
-        return result;
     }
 
     template<
-        typename TagsIndex,
-        typename LanguagesIndex,
+        typename DiscussionOrder,
         typename Selector>
     std::vector<discussion> social_network::impl::select_ordered_discussions(
         discussion_query& query,
         Selector&& selector
     ) const {
-        if (!query.select_tags.empty()) {
-            return select_ordered_discussions<tags::tag_index, tags::by_comment, TagsIndex>(
-                query, query.select_tags, query.filter_tags, selector);
-        } else {
-            return select_ordered_discussions<languages::language_index, languages::by_comment, LanguagesIndex>(
-                query, query.select_languages, query.filter_languages, selector);
+        std::vector<discussion> unordered;
+        auto& db = database();
+
+        db.with_weak_read_lock([&]() {
+            if (!filter_query(query)) {
+                return false;
+            }
+
+            std::set<comment_object::id_type> id_set;
+            if (!query.select_tags.empty()) { // seems to have a least complexity
+                const auto& idx = db.get_index<tags::tag_index>().indices().get<tags::by_tag>();
+                auto etr = idx.end();
+                unordered.reserve(query.select_tags.size() * query.limit);
+                for (auto& name: query.select_tags) {
+                    select_discussions(
+                        id_set, unordered, query, idx.lower_bound(std::make_tuple(name, tags::tag_type::tag)), etr,
+                        selector,
+                        [&](const tags::tag_object& tag){
+                            return tag.name != name || tag.type != tags::tag_type::tag;
+                        });
+                }
+            } else if (!query.select_authors.empty()) { // a more complexity
+                const auto& idx = db.get_index<tags::tag_index>().indices().get<tags::by_author_comment>();
+                auto etr = idx.end();
+                unordered.reserve(query.select_author_ids.size() * query.limit);
+                for (auto& id: query.select_author_ids) {
+                    select_discussions(
+                        id_set, unordered, query, idx.lower_bound(id), etr, selector,
+                        [&](const tags::tag_object& tag){
+                            return tag.author != id;
+                        });
+                }
+            } else if (!query.select_languages.empty()) { // the most complexity
+                const auto& idx = db.get_index<tags::tag_index>().indices().get<tags::by_tag>();
+                auto etr = idx.end();
+                unordered.reserve(query.select_tags.size() * query.limit);
+                for (auto& name: query.select_languages) {
+                    select_discussions(
+                        id_set, unordered, query, idx.lower_bound(std::make_tuple(name, tags::tag_type::language)), etr,
+                        selector,
+                        [&](const tags::tag_object& tag){
+                            return tag.name != name || tag.type != tags::tag_type::language;
+                        });
+                }
+            } else {
+                const auto& indices = db.get_index<tags::tag_index>().indices();
+                const auto& idx = indices.get<DiscussionOrder>();
+                auto itr = idx.begin();
+
+                if (query.comment._id) {
+                    const auto& cidx = indices.get<tags::by_comment>();
+                    const auto citr = cidx.find(query.comment);
+                    if (citr != cidx.end()) {
+                        return false;
+                    }
+
+                    query.comment._id = 0;
+                    itr = idx.iterator_to(*citr);
+                }
+
+                unordered.reserve(query.limit);
+
+                select_discussions(
+                    id_set, unordered, query, itr, idx.end(), selector,
+                    [&](const tags::tag_object& tag){
+                        return unordered.size() >= query.limit;
+                    });
+            }
+            return true;
+        });
+
+        std::vector<discussion> result;
+        if (unordered.empty()) {
+            return result;
         }
+
+        auto it = unordered.begin();
+        const auto et = unordered.end();
+        std::sort(it, et, DiscussionOrder());
+        if (query.comment._id) {
+            for (; et != it && it->id != query.comment._id; ++it);
+            if (et == it) {
+                return result;
+            }
+        }
+
+        for (uint32_t idx = 0; idx < query.limit && et != it; ++it, ++idx) {
+            result.push_back(std::move(*it));
+        }
+
+        return result;
     }
 
     DEFINE_API(social_network, get_discussions_by_comments) {
@@ -753,6 +756,7 @@ namespace golos { namespace plugins { namespace social_network {
         std::vector<discussion> result;
 #ifndef IS_LOW_MEM
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
         if (query.select_authors.empty()) {
             return result;
@@ -776,6 +780,7 @@ namespace golos { namespace plugins { namespace social_network {
         std::vector<discussion> result;
 
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
         if (query.select_authors.empty()) {
             return result;
@@ -802,6 +807,7 @@ namespace golos { namespace plugins { namespace social_network {
         std::vector<discussion> result;
 
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
         if (query.select_authors.empty()) {
             return result;
@@ -826,17 +832,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_trending) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_parent_trending, languages::by_parent_trending>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return d.children_rshares2 > 0 && d.mode != archived;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_trending>(
+            query,
+            [&](const discussion& d) -> bool {
+                return d.net_rshares > 0;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -844,17 +848,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_promoted) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_parent_promoted, languages::by_parent_promoted>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return d.children_rshares2 > 0;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_promoted>(
+            query,
+            [&](const discussion& d) -> bool {
+                return d.children_rshares2 > 0;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -862,17 +864,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_created) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_parent_created, languages::by_parent_created>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return true;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_created>(
+            query,
+            [&](const discussion& d) -> bool {
+                return true;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -880,17 +880,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_active) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_parent_active, languages::by_parent_active>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return true;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_active>(
+            query,
+            [&](const discussion& d) -> bool {
+                return true;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -898,17 +896,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_cashout) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_cashout, languages::by_cashout>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return d.children_rshares2 > 0;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_cashout>(
+            query,
+            [&](const discussion& d) -> bool {
+                return d.children_rshares2 > 0;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -916,17 +912,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_payout) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_net_rshares, languages::by_net_rshares>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return d.children_rshares2 > 0;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_net_rshares>(
+            query,
+            [&](const discussion& d) -> bool {
+                return d.children_rshares2 > 0;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -934,17 +928,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_votes) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_parent_net_votes, languages::by_parent_net_votes>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return d.children_rshares2 > 0;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_net_votes>(
+            query,
+            [&](const discussion& d) -> bool {
+                return d.children_rshares2 > 0;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -952,17 +944,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_children) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_parent_children, languages::by_parent_children>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return true;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_children>(
+            query,
+            [&](const discussion& d) -> bool {
+                return true;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -970,17 +960,15 @@ namespace golos { namespace plugins { namespace social_network {
     DEFINE_API(social_network, get_discussions_by_hot) {
         CHECK_ARG_SIZE(1)
         auto query = args.args->at(0).as<discussion_query>();
+        query.prepare();
         query.validate();
 #ifndef IS_LOW_MEM
-        auto& db = pimpl->database();
-        return db.with_weak_read_lock([&]() {
-            return pimpl->select_ordered_discussions<tags::by_parent_hot, languages::by_parent_hot>(
-                query,
-                [&](const discussion& d) -> bool {
-                    return d.children_rshares2 > 0;
-                }
-            );
-        });
+        return pimpl->select_ordered_discussions<sort::by_hot>(
+            query,
+            [&](const discussion& d) -> bool {
+                return d.children_rshares2 > 0;
+            }
+        );
 #endif
         return std::vector<discussion>();
     }
@@ -1032,15 +1020,17 @@ namespace golos { namespace plugins { namespace social_network {
             }
         }
 
-        while (itr != ridx.end() && result.size() < limit) {
-            tag_api_object push_object = tag_api_object(*itr);
+        for (; itr != ridx.end() && result.size() < limit; ++itr) {
+            if (itr->type == tags::tag_type::tag) {
+                tag_api_object push_object = tag_api_object(*itr);
 
-            if (!fc::is_utf8(push_object.name)) {
-                push_object.name = fc::prune_invalid_utf8(push_object.name);
+                if (!fc::is_utf8(push_object.name)) {
+                    push_object.name = fc::prune_invalid_utf8(push_object.name);
+                }
+
+                result.emplace_back(push_object);
+                ++itr;
             }
-
-            result.emplace_back(push_object);
-            ++itr;
         }
 #endif
         return result;
@@ -1067,13 +1057,14 @@ namespace golos { namespace plugins { namespace social_network {
         const auto& tidx =
             db.get_index<tags::author_tag_stats_index>().indices().get<tags::by_author_posts_tag>();
         auto itr = tidx.lower_bound(boost::make_tuple(acnt->id, 0));
-        while (itr != tidx.end() && itr->author == acnt->id && result.size() < 1000) {
-            if (!fc::is_utf8(itr->tag)) {
-                result.emplace_back(std::make_pair(fc::prune_invalid_utf8(itr->tag), itr->total_posts));
-            } else {
-                result.emplace_back(std::make_pair(itr->tag, itr->total_posts));
+        for (;itr != tidx.end() && itr->author == acnt->id && result.size() < 1000; ++itr) {
+            if (itr->type == tags::tag_type::tag) {
+                if (!fc::is_utf8(itr->name)) {
+                    result.emplace_back(std::make_pair(fc::prune_invalid_utf8(itr->name), itr->total_posts));
+                } else {
+                    result.emplace_back(std::make_pair(itr->name, itr->total_posts));
+                }
             }
-            ++itr;
         }
 #endif
         return result;
