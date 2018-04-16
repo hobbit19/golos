@@ -1,5 +1,6 @@
 #include <golos/plugins/mongo_db/mongo_db_operations.hpp>
 #include <golos/plugins/follow/follow_objects.hpp>
+#include <golos/plugins/follow/plugin.hpp>
 #include <golos/plugins/chain/plugin.hpp>
 #include <golos/chain/comment_object.hpp>
 #include <golos/chain/account_object.hpp>
@@ -156,7 +157,7 @@ namespace mongo_db {
         // pending_payout_value
         format_value(comment_doc, "percent_steem_dollars", std::to_string(comment_obj.percent_steem_dollars));
         // promoted
-        // reblogged_by
+        format_reblogged_by(comment_obj, comment_doc);
         // replies
         format_value(comment_doc, "reward_weight", std::to_string(comment_obj.reward_weight));
         format_value(comment_doc, "root_comment", std::to_string(comment_obj.root_comment._id));
@@ -199,6 +200,24 @@ namespace mongo_db {
         }
 
         doc << "active_votes" << votes;
+    }
+
+    void operation_writer::format_reblogged_by(const comment_object& comm, document& doc) {
+
+        array result;
+
+        const auto &post = _db.get_comment(comm.author, comm.permlink);
+        const auto &blog_idx = _db.get_index<blog_index, by_comment>();
+        auto itr = blog_idx.lower_bound(post.id);
+
+        int arr_size = 0;
+        while (itr != blog_idx.end() && itr->comment == post.id && ++arr_size < 2000) {
+
+            result << itr->account;
+            ++itr;
+        }
+
+        doc << "reblogged_by" << result;
     }
 
     std::string operation_writer::get_account_reputation(const account_name_type& account) {
