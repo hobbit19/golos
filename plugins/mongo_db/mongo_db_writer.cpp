@@ -137,7 +137,11 @@ namespace mongo_db {
                         operation_writer op_writer;
                         op.visit(op_writer);
 
-                        operations_array << op_writer.get_document();
+                        std::vector<document_ptr> docs = op_writer.get_documents();
+
+                        for (document_ptr doc : docs) {
+                            operations_array << *doc;
+                        }
                     }
                     catch (fc::exception& ex) {
                         ilog("MongoDB write_raw_block fc::exception ${e}", ("e", ex.what()));
@@ -188,17 +192,20 @@ namespace mongo_db {
                     continue;
                 }
 
-                document& doc = op_writer.get_document();
-                format_transaction_info(tran, doc);
-                format_block_info(block, doc);
+                std::vector<document_ptr> doc_arr = op_writer.get_documents();
+                for (document_ptr doc : doc_arr) {
+                    format_transaction_info(tran, *doc);
+                    format_block_info(block, *doc);
 
-                if (_formatted_blocks.find(op_name.get_result()) == _formatted_blocks.end()) {
-                    std::shared_ptr<mongocxx::bulk_write> write(new mongocxx::bulk_write(bulk_opts));
-                    _formatted_blocks[op_name.get_result()] = write;
+                    if (_formatted_blocks.find(op_name.get_result()) == _formatted_blocks.end()) {
+                        std::shared_ptr<mongocxx::bulk_write> write(new mongocxx::bulk_write(bulk_opts));
+                        _formatted_blocks[op_name.get_result()] = write;
+                    }
+
+                    mongocxx::model::insert_one insert_msg{doc->view()};
+                    _formatted_blocks[op_name.get_result()]->append(insert_msg);
+
                 }
-
-                mongocxx::model::insert_one insert_msg{doc.view()};
-                _formatted_blocks[op_name.get_result()]->append(insert_msg);
             }
         }
     }

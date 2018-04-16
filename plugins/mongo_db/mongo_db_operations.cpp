@@ -81,8 +81,14 @@ namespace mongo_db {
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
     }
 
-    document& operation_writer::get_document() {
-        return data;
+    std::vector<document_ptr> operation_writer::get_documents() {
+        if (!data_buffer.empty()) {
+            return data_buffer;
+        }
+        document_ptr ptr(&data);
+        data_buffer.push_back(ptr);
+
+        return data_buffer;
     }
 
     void operation_writer::log_operation(const std::string& name) {
@@ -221,15 +227,36 @@ namespace mongo_db {
     }
 
     void operation_writer::operator()(const comment_operation &op) {
-        document body;
 
-        log_operation("comment");
+        document_ptr data_comm_obj(new document());
+        document body_comm_obj;
 
-        format_comment(op.author, op.permlink, body);
+        // First write comment_object
+        log_operation("comment_object");
+        format_comment(op.author, op.permlink, body_comm_obj);
 
-        format_value(body, "json_metadata", op.json_metadata);
+        *data_comm_obj << "comment_object" << body_comm_obj;
 
-        data << "comment" << body;
+        data_buffer.push_back(data_comm_obj);
+
+
+        // Now write comment_operation
+        log_operation("comment_operation");
+
+        document_ptr data_comm_oper(new document());
+        document body_comm_oper;
+
+        format_value(body_comm_oper, "parent_author", op.parent_author);
+        format_value(body_comm_oper, "parent_permlink", op.parent_permlink);
+        format_value(body_comm_oper, "author", op.author);
+        format_value(body_comm_oper, "permlink", op.permlink);
+        format_value(body_comm_oper, "title", op.title);
+        format_value(body_comm_oper, "body", op.body);
+        format_value(body_comm_oper, "json_metadata", op.json_metadata);
+
+        *data_comm_oper << "comment_operation" << body_comm_oper;
+
+        data_buffer.push_back(data_comm_oper);
     }
 
     void operation_writer::operator()(const transfer_operation &op) {

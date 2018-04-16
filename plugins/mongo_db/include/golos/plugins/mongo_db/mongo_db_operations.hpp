@@ -23,6 +23,8 @@ namespace mongo_db {
     using namespace golos::protocol;
     using bsoncxx::builder::stream::document;
 
+    using document_ptr = std::shared_ptr<document>;
+
     class operation_writer {
     public:
 
@@ -30,7 +32,7 @@ namespace mongo_db {
 
         typedef void result_type;
 
-        document& get_document();
+        std::vector<document_ptr> get_documents();
 
         void format_comment(const std::string& auth, const std::string& perm, document& comment_doc);
         void format_comment_active_votes(const comment_object& comm, document& doc);
@@ -93,6 +95,8 @@ namespace mongo_db {
     private:
         void log_operation(const std::string& name);
         document data;
+        // Additional buffer
+        std::vector<document_ptr> data_buffer;
         database &_db;
     };
 
