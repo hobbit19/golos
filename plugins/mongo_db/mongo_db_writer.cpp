@@ -229,14 +229,23 @@ namespace mongo_db {
 
     void mongo_db_writer::write_data() {
 
-        for (auto oper : _formatted_blocks) {
+        auto iter = _formatted_blocks.begin();
+        for (; iter != _formatted_blocks.end(); ++iter) {
 
-            const std::string& collection_name = oper.first;
-            mongocxx::collection _collection = get_active_collection(collection_name);
+            auto oper = *iter;
+            try {
+                const std::string& collection_name = oper.first;
+                mongocxx::collection _collection = get_active_collection(collection_name);
 
-            bulk_ptr bulkp = oper.second;
-            if (!_collection.bulk_write(*bulkp)) {
-                ilog("Failed to write blocks to Mongo DB");
+                bulk_ptr bulkp = oper.second;
+                if (!_collection.bulk_write(*bulkp)) {
+                    ilog("Failed to write blocks to Mongo DB");
+                }
+            }
+            catch (...) {
+                // If we got some errors writing block into mongo just skip this block and move on
+                _formatted_blocks.erase(iter);
+                throw;
             }
         }
         _formatted_blocks.clear();
