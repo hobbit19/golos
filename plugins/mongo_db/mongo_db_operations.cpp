@@ -100,13 +100,11 @@ namespace mongo_db {
 
         const comment_object* comment_obj_ptr;
 
-        _db.with_read_lock([&](){
-            comment_obj_ptr =_db.find_comment(auth, perm);
+        comment_obj_ptr =_db.find_comment(auth, perm);
 
-            if (comment_obj_ptr == NULL) {
-                return;
-            }
-        });
+        if (comment_obj_ptr == NULL) {
+            return;
+        }
 
         comment_object comment_obj = *comment_obj_ptr;
 
