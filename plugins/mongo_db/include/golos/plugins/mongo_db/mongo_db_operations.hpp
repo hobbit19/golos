@@ -96,7 +96,7 @@ namespace mongo_db {
 
     private:
         void log_operation(const std::string& name);
-        document data;
+        document_ptr data;
         // Additional buffer
         std::vector<document_ptr> data_buffer;
         database &_db;
