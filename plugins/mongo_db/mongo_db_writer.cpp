@@ -29,6 +29,9 @@ namespace mongo_db {
     }
 
     mongo_db_writer::~mongo_db_writer() {
+        shut_down = true;
+        data_cond.notify_one();
+        worker_thread->join();
     }
 
     bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op) {
@@ -55,27 +58,56 @@ namespace mongo_db {
         }
     }
 
+    void mongo_db_writer::worker_thread_entrypoint() {
+
+        try {
+
+            while (!shut_down) {
+
+                std::unique_lock<std::mutex> lock(data_mutex);
+                data_cond.wait(lock);
+
+                write_blocks();
+            }
+
+        }
+        catch (fc::exception & ex) {
+            ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
+        }
+        catch (mongocxx::exception & ex) {
+            ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
+        }
+        catch (...) {
+            ilog("Unknown exception in MongoDB");
+        }
+    }
+
     void mongo_db_writer::on_block(const signed_block& block) {
 
         try {
 
-            _blocks[block.block_num()] = block;
+            if (data_mutex.try_lock()) {
+                try {
+                    if (!_blocks_buffer.empty()) {
+                        std::move(_blocks_buffer.begin(), _blocks_buffer.end(), std::inserter(_blocks, _blocks.end()));
+                        _blocks_buffer.clear();
+                    }
+                    _blocks[block.block_num()] = block;
 
+                    data_mutex.unlock();
+                }
+                catch (...) {
+                    data_mutex.unlock();
+                }
+            }
+            else {
+                _blocks_buffer[block.block_num()] = block;
+            }
             // Update last irreversible block number
             last_irreversible_block_num = _db.last_non_undoable_block_num();
             if (last_irreversible_block_num >= _blocks.begin()->first) {
-                try {
-                    write_blocks();
-                }
-                catch (fc::exception &ex) {
-                    //ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
-                }
-                catch (mongocxx::exception &ex) {
-                    //ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
-                }
-                catch (...) {
-                    ilog("Unknown exception in MongoDB");
-                }
+
+                data_cond.notify_one();
             }
 
             ++processed_blocks;

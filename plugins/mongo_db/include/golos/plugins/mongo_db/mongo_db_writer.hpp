@@ -13,13 +13,12 @@
 #include <mongocxx/instance.hpp>
 #include <mongocxx/uri.hpp>
 
+#include <appbase/application.hpp>
 
 #include <thread>
 #include <map>
 #include <mutex>
 #include <condition_variable>
-#include <thirdparty/appbase/include/appbase/application.hpp>
-#include <boost/asio/io_service.hpp>
 
 
 namespace golos {
@@ -45,6 +44,7 @@ namespace mongo_db {
 
     private:
 
+        void worker_thread_entrypoint();
         void write_blocks();
         void write_raw_block(const signed_block& block);
         void write_block_operations(const signed_block& block);
@@ -75,6 +75,11 @@ namespace mongo_db {
         // Table name, bulk write
         std::map<std::string, bulk_ptr> _formatted_blocks;
         std::map<std::string, mongocxx::collection> active_collections;
+
+        bool shut_down = false;
+        std::mutex data_mutex;
+        std::condition_variable data_cond;
+        std::unique_ptr<std::thread> worker_thread;
 
         bool write_raw_blocks;
         std::vector<std::string> write_operations;
