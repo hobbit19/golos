@@ -54,10 +54,9 @@ namespace mongo_db {
     }
 
     void format_asset(const asset& _asset, document& asset_doc, const std::string& val) {
-        array arr;
-        arr << std::to_string(_asset.to_real());
-        arr << _asset.symbol_name();
-        asset_doc << val << arr;
+
+        asset_doc << val + "_value" << std::to_string(_asset.to_real());
+        asset_doc << val + "_symbol" << _asset.symbol_name();
     }
 
     void format_value(document& doc, const std::string& name, const std::string& value) {
@@ -168,6 +167,7 @@ namespace mongo_db {
         format_value(comment_doc, "vote_rshares", std::to_string(comment_obj.vote_rshares.value));
         // last_reply
         // last_reply_by
+        format_value(comment_doc, "json_metadata", comment_obj.json_metadata.c_str());
     }
 
     void operation_writer::format_comment_active_votes(const comment_object& comment, document& doc) {
