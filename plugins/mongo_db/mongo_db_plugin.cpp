@@ -50,15 +50,12 @@ namespace mongo_db {
             boost::program_options::options_description &cfg) {
         cli.add_options()
                 ("mongodb-uri",
-                 boost::program_options::value<string>()->default_value("mongodb://172.17.0.1:27017/Golos"),
+                 boost::program_options::value<string>()->default_value("mongodb://127.0.0.1:27017/Golos"),
                 "Mongo DB connection string");
-        cfg.add(cli);
         cli.add_options()
                 ("mongodb-write-raw-blocks",
                  boost::program_options::value<bool>()->default_value(true),
                  "Write raw blocks into mongo or not");
-        std::vector<string> vec;
-        vec.push_back("comment");
         cli.add_options()
                 ("mongodb-write-operations",
                  boost::program_options::value<std::vector<std::string>>()->multitoken()->zero_tokens()->composing(),

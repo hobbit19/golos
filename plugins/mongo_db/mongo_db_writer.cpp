@@ -29,9 +29,6 @@ namespace mongo_db {
     }
 
     mongo_db_writer::~mongo_db_writer() {
-        shut_down = true;
-        data_cond.notify_one();
-        worker_thread->join();
     }
 
     bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op) {
@@ -58,56 +55,35 @@ namespace mongo_db {
         }
     }
 
-    void mongo_db_writer::worker_thread_entrypoint() {
-
-        try {
-
-            while (!shut_down) {
-
-                std::unique_lock<std::mutex> lock(data_mutex);
-                data_cond.wait(lock);
-
-                write_blocks();
-            }
-
-        }
-        catch (fc::exception & ex) {
-            ilog("fc::exception in MongoDB on_block: ${p}", ("p", ex.what()));
-        }
-        catch (mongocxx::exception & ex) {
-            ilog("Exception in MongoDB on_block: ${p}", ("p", ex.what()));
-        }
-        catch (...) {
-            ilog("Unknown exception in MongoDB");
-        }
-    }
-
     void mongo_db_writer::on_block(const signed_block& block) {
 
         try {
 
-            if (data_mutex.try_lock()) {
-                try {
-                    if (!_blocks_buffer.empty()) {
-                        std::move(_blocks_buffer.begin(), _blocks_buffer.end(), std::inserter(_blocks, _blocks.end()));
-                        _blocks_buffer.clear();
-                    }
-                    _blocks[block.block_num()] = block;
+            _blocks[block.block_num()] = block;
 
-                    data_mutex.unlock();
-                }
-                catch (...) {
-                    data_mutex.unlock();
-                }
-            }
-            else {
-                _blocks_buffer[block.block_num()] = block;
-            }
             // Update last irreversible block number
             last_irreversible_block_num = _db.last_non_undoable_block_num();
             if (last_irreversible_block_num >= _blocks.begin()->first) {
 
-                data_cond.notify_one();
+                // Write all the blocks that has num less then last irreversible block
+                while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
+                    auto head_iter = _blocks.begin();
+
+                    try {
+                        if (write_raw_blocks) {
+                            write_raw_block(head_iter->second);
+                        }
+
+                        write_block_operations(head_iter->second);
+                    }
+                    catch (...) {
+                        // If some block causes any problems lets remove it from buffer and move on
+                        _blocks.erase(head_iter);
+                        throw;
+                    }
+                    _blocks.erase(head_iter);
+                }
+                write_data();
             }
 
             ++processed_blocks;
@@ -115,32 +91,6 @@ namespace mongo_db {
         catch (...) {
             ilog("Unknown exception in MongoDB");
         }
-    }
-
-    void mongo_db_writer::write_blocks() {
-
-        if (_blocks.empty()) {
-            return;
-        }
-
-        // Write all the blocks that has num less then last irreversible block
-        while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
-            auto head_iter = _blocks.begin();
-
-            try {
-                if (write_raw_blocks) {
-                    write_raw_block(head_iter->second);
-                }
-
-                write_block_operations(head_iter->second);
-            }
-            catch (...) {
-                _blocks.erase(head_iter);
-                throw;
-            }
-            _blocks.erase(head_iter);
-        }
-        write_data();
     }
 
     void mongo_db_writer::write_raw_block(const signed_block& block) {
@@ -275,6 +225,7 @@ namespace mongo_db {
                 }
             }
             catch (...) {
+                ilog("Unknown exception while writing blocks to mongo");
                 // If we got some errors writing block into mongo just skip this block and move on
                 _formatted_blocks.erase(iter);
                 throw;

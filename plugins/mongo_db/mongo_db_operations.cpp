@@ -173,64 +173,57 @@ namespace mongo_db {
     void operation_writer::format_comment_active_votes(const comment_object& comment, document& doc) {
 
         array votes;
+        const auto &idx = _db.get_index<comment_vote_index>().indices().get<by_comment_voter>();
+        comment_object::id_type cid(comment.id);
+        auto itr = idx.lower_bound(cid);
 
-        _db.with_strong_read_lock([&](){
-            const auto &idx = _db.get_index<comment_vote_index>().indices().get<by_comment_voter>();
-            comment_object::id_type cid(comment.id);
-            auto itr = idx.lower_bound(cid);
+        while (itr != idx.end() && itr->comment == cid) {
 
-            while (itr != idx.end() && itr->comment == cid) {
+            document vote_doc;
 
-                document vote_doc;
+            const auto &vo = _db.get(itr->voter);
 
-                const auto &vo = _db.get(itr->voter);
+            format_value(vote_doc, "voter", vo.name);
+            format_value(vote_doc, "weight", std::to_string(itr->weight));
+            format_value(vote_doc, "rshares", std::to_string(itr->rshares));
+            format_value(vote_doc, "percent", std::to_string(itr->vote_percent));
+            format_value(vote_doc, "time", itr->last_update.to_iso_string());
+            format_value(vote_doc, "reputation", get_account_reputation(vo.name));
 
-                format_value(vote_doc, "voter", vo.name);
-                format_value(vote_doc, "weight", std::to_string(itr->weight));
-                format_value(vote_doc, "rshares", std::to_string(itr->rshares));
-                format_value(vote_doc, "percent", std::to_string(itr->vote_percent));
-                format_value(vote_doc, "time", itr->last_update.to_iso_string());
-                format_value(vote_doc, "reputation", get_account_reputation(vo.name));
+            votes << vote_doc;
 
-                votes << vote_doc;
+            ++itr;
+        }
 
-                ++itr;
-            }
-
-            doc << "active_votes" << votes;
-        });
+        doc << "active_votes" << votes;
     }
 
     void operation_writer::format_reblogged_by(const comment_object& comm, document& doc) {
 
         array result;
 
-        _db.with_strong_read_lock([&](){
-            const auto &post = _db.get_comment(comm.author, comm.permlink);
-            const auto &blog_idx = _db.get_index<blog_index, by_comment>();
-            auto itr = blog_idx.lower_bound(post.id);
+        const auto &post = _db.get_comment(comm.author, comm.permlink);
+        const auto &blog_idx = _db.get_index<blog_index, by_comment>();
+        auto itr = blog_idx.lower_bound(post.id);
 
-            int arr_size = 0;
-            while (itr != blog_idx.end() && itr->comment == post.id && ++arr_size < 2000) {
+        int arr_size = 0;
+        while (itr != blog_idx.end() && itr->comment == post.id && ++arr_size < 2000) {
 
-                result << itr->account;
-                ++itr;
-            }
+            result << itr->account;
+            ++itr;
+        }
 
-            doc << "reblogged_by" << result;
-        });
+        doc << "reblogged_by" << result;
     }
 
     std::string operation_writer::get_account_reputation(const account_name_type& account) {
 
-        _db.with_strong_read_lock([&](){
-            auto &rep_idx = _db.get_index<reputation_index>().indices().get<by_account>();
-            auto itr = rep_idx.find(account);
+        auto &rep_idx = _db.get_index<reputation_index>().indices().get<by_account>();
+        auto itr = rep_idx.find(account);
 
-            if (rep_idx.end() != itr) {
-                return itr->reputation;
-            }
-        });
+        if (rep_idx.end() != itr) {
+            return itr->reputation;
+        }
 
         return "0";
     }
