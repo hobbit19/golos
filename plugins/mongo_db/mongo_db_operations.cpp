@@ -174,7 +174,7 @@ namespace mongo_db {
 
         array votes;
 
-        _db.with_read_lock([&](){
+        _db.with_strong_read_lock([&](){
             const auto &idx = _db.get_index<comment_vote_index>().indices().get<by_comment_voter>();
             comment_object::id_type cid(comment.id);
             auto itr = idx.lower_bound(cid);
@@ -205,7 +205,7 @@ namespace mongo_db {
 
         array result;
 
-        _db.with_read_lock([&](){
+        _db.with_strong_read_lock([&](){
             const auto &post = _db.get_comment(comm.author, comm.permlink);
             const auto &blog_idx = _db.get_index<blog_index, by_comment>();
             auto itr = blog_idx.lower_bound(post.id);
@@ -223,7 +223,7 @@ namespace mongo_db {
 
     std::string operation_writer::get_account_reputation(const account_name_type& account) {
 
-        _db.with_read_lock([&](){
+        _db.with_strong_read_lock([&](){
             auto &rep_idx = _db.get_index<reputation_index>().indices().get<by_account>();
             auto itr = rep_idx.find(account);
 
