@@ -102,84 +102,78 @@ namespace mongo_db {
 
         //ilog("MongoDB operation format_comment: ${p} ${e}", ("p", auth)("e", perm));
 
-        const comment_object* comment_obj_ptr = NULL;
-
         try {
-            comment_obj_ptr = _db.find_comment(auth, perm);
+            const comment_object& comment_obj = _db.get_comment(auth, perm);
+
+            format_value(comment_doc, "author", comment_obj.author);
+            format_value(comment_doc, "permlink", comment_obj.permlink.c_str());
+            format_value(comment_doc, "abs_rshares", comment_obj.abs_rshares);
+            format_value(comment_doc, "active", comment_obj.active.to_iso_string());
+            format_comment_active_votes(comment_obj, comment_doc);
+            format_value(comment_doc, "allow_curation_rewards", (comment_obj.allow_curation_rewards ? "true" : "false"));
+            format_value(comment_doc, "allow_replies", (comment_obj.allow_replies ? "true" : "false"));
+            format_value(comment_doc, "allow_votes", (comment_obj.allow_votes ? "true" : "false"));
+            format_value(comment_doc, "author_rewards", comment_obj.author_rewards);
+            format_value(comment_doc, "author_reputation", get_account_reputation(comment_obj.author));
+            format_value(comment_doc, "body", comment_obj.body.c_str());
+            format_value(comment_doc, "body_length", std::to_string(comment_obj.body.length()));
+            format_value(comment_doc, "cashout_time", comment_obj.cashout_time.to_iso_string());
+            format_value(comment_doc, "category", comment_obj.category.c_str());
+            format_value(comment_doc, "children", std::to_string(comment_obj.children));
+            format_value(comment_doc, "children_abs_rshares", std::to_string(comment_obj.children_abs_rshares.value));
+            format_value(comment_doc, "children_rshares2", comment_obj.children_rshares2);
+            format_value(comment_doc, "created", comment_obj.created.to_iso_string());
+            format_asset(comment_obj.curator_payout_value, comment_doc, "curator_payout_value");
+            format_value(comment_doc, "depth", std::to_string(comment_obj.depth));
+            format_value(comment_doc, "id", std::to_string(comment_obj.id._id));
+            format_value(comment_doc, "last_payout", comment_obj.last_payout.to_iso_string());
+            format_value(comment_doc, "last_update", comment_obj.last_update.to_iso_string());
+            format_asset(comment_obj.max_accepted_payout, comment_doc, "max_accepted_payout");
+            format_value(comment_doc, "max_cashout_time", comment_obj.max_cashout_time.to_iso_string());
+
+            std::string comment_mode;
+            switch (comment_obj.mode) {
+                case first_payout:
+                    comment_mode = "first_payout";
+                    break;
+                case second_payout:
+                    comment_mode = "second_payout";
+                    break;
+                case archived:
+                    comment_mode = "archived";
+                    break;
+            }
+
+            format_value(comment_doc, "mode", comment_mode);
+            format_value(comment_doc, "net_rshares", std::to_string(comment_obj.net_rshares.value));
+            format_value(comment_doc, "net_votes", std::to_string(comment_obj.net_votes));
+            format_value(comment_doc, "parent_author", comment_obj.parent_author);
+            format_value(comment_doc, "parent_permlink", comment_obj.parent_permlink.c_str());
+            // pending_payout_value
+            format_value(comment_doc, "percent_steem_dollars", std::to_string(comment_obj.percent_steem_dollars));
+            // promoted
+            format_reblogged_by(comment_obj, comment_doc);
+            // replies
+            format_value(comment_doc, "reward_weight", std::to_string(comment_obj.reward_weight));
+            format_value(comment_doc, "root_comment", std::to_string(comment_obj.root_comment._id));
+            // root_title
+            // scanned
+            format_value(comment_doc, "title", comment_obj.title.c_str());
+            format_asset(comment_obj.total_payout_value, comment_doc, "total_payout_value");
+            // total_pending_payout_value
+            format_value(comment_doc, "total_vote_weight", std::to_string(comment_obj.total_vote_weight));
+            // url
+            format_value(comment_doc, "vote_rshares", std::to_string(comment_obj.vote_rshares.value));
+            // last_reply
+            // last_reply_by
+            format_value(comment_doc, "json_metadata", comment_obj.json_metadata.c_str());
+        }
+        catch (fc::exception& ex) {
+            ilog("MongoDB operations fc::exception. ${e}", ("e", ex.what()));
         }
         catch (...) {
             ilog("Unknown exception during formatting comment.");
         }
-
-        if (comment_obj_ptr == NULL) {
-            ilog("Cannot find comment object.");
-            return;
-        }
-
-        comment_object comment_obj = *comment_obj_ptr;
-
-        format_value(comment_doc, "author", comment_obj.author);
-        format_value(comment_doc, "permlink", comment_obj.permlink.c_str());
-        format_value(comment_doc, "abs_rshares", comment_obj.abs_rshares);
-        format_value(comment_doc, "active", comment_obj.active.to_iso_string());
-        format_comment_active_votes(comment_obj, comment_doc);
-        format_value(comment_doc, "allow_curation_rewards", (comment_obj.allow_curation_rewards ? "true" : "false"));
-        format_value(comment_doc, "allow_replies", (comment_obj.allow_replies ? "true" : "false"));
-        format_value(comment_doc, "allow_votes", (comment_obj.allow_votes ? "true" : "false"));
-        format_value(comment_doc, "author_rewards", comment_obj.author_rewards);
-        format_value(comment_doc, "author_reputation", get_account_reputation(comment_obj.author));
-        format_value(comment_doc, "body", comment_obj.body.c_str());
-        format_value(comment_doc, "body_length", std::to_string(comment_obj.body.length()));
-        format_value(comment_doc, "cashout_time", comment_obj.cashout_time.to_iso_string());
-        format_value(comment_doc, "category", comment_obj.category.c_str());
-        format_value(comment_doc, "children", std::to_string(comment_obj.children));
-        format_value(comment_doc, "children_abs_rshares", std::to_string(comment_obj.children_abs_rshares.value));
-        format_value(comment_doc, "children_rshares2", comment_obj.children_rshares2);
-        format_value(comment_doc, "created", comment_obj.created.to_iso_string());
-        format_asset(comment_obj.curator_payout_value, comment_doc, "curator_payout_value");
-        format_value(comment_doc, "depth", std::to_string(comment_obj.depth));
-        format_value(comment_doc, "id", std::to_string(comment_obj.id._id));
-        format_value(comment_doc, "last_payout", comment_obj.last_payout.to_iso_string());
-        format_value(comment_doc, "last_update", comment_obj.last_update.to_iso_string());
-        format_asset(comment_obj.max_accepted_payout, comment_doc, "max_accepted_payout");
-        format_value(comment_doc, "max_cashout_time", comment_obj.max_cashout_time.to_iso_string());
-
-        std::string comment_mode;
-        switch (comment_obj.mode) {
-            case first_payout:
-                comment_mode = "first_payout";
-                break;
-            case second_payout:
-                comment_mode = "second_payout";
-                break;
-            case archived:
-                comment_mode = "archived";
-                break;
-        }
-
-        format_value(comment_doc, "mode", comment_mode);
-        format_value(comment_doc, "net_rshares", std::to_string(comment_obj.net_rshares.value));
-        format_value(comment_doc, "net_votes", std::to_string(comment_obj.net_votes));
-        format_value(comment_doc, "parent_author", comment_obj.parent_author);
-        format_value(comment_doc, "parent_permlink", comment_obj.parent_permlink.c_str());
-        // pending_payout_value
-        format_value(comment_doc, "percent_steem_dollars", std::to_string(comment_obj.percent_steem_dollars));
-        // promoted
-        format_reblogged_by(comment_obj, comment_doc);
-        // replies
-        format_value(comment_doc, "reward_weight", std::to_string(comment_obj.reward_weight));
-        format_value(comment_doc, "root_comment", std::to_string(comment_obj.root_comment._id));
-        // root_title
-        // scanned
-        format_value(comment_doc, "title", comment_obj.title.c_str());
-        format_asset(comment_obj.total_payout_value, comment_doc, "total_payout_value");
-        // total_pending_payout_value
-        format_value(comment_doc, "total_vote_weight", std::to_string(comment_obj.total_vote_weight));
-        // url
-        format_value(comment_doc, "vote_rshares", std::to_string(comment_obj.vote_rshares.value));
-        // last_reply
-        // last_reply_by
-        format_value(comment_doc, "json_metadata", comment_obj.json_metadata.c_str());
     }
 
     void operation_writer::format_comment_active_votes(const comment_object& comment, document& doc) {
