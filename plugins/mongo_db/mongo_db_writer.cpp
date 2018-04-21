@@ -26,7 +26,6 @@ namespace mongo_db {
 
     mongo_db_writer::mongo_db_writer() :
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
-        ilog("MongoDB writer ctor.");
     }
 
     mongo_db_writer::~mongo_db_writer() {
@@ -34,7 +33,6 @@ namespace mongo_db {
 
     bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op) {
         try {
-            ilog("Initializing MongoDB writer. ${e} ${p}", ("e", write_raw)("p", op.size()));
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
             db_name = uri.database().empty() ? "Golos" : uri.database();
@@ -99,7 +97,7 @@ namespace mongo_db {
 
     void mongo_db_writer::write_raw_block(const signed_block& block) {
 
-        ilog("mongo_db_writer::write_raw_block ${e}", ("e", block.block_num()));
+        //ilog("mongo_db_writer::write_raw_block ${e}", ("e", block.block_num()));
 
         document block_doc;
         format_block_info(block, block_doc);
@@ -162,18 +160,22 @@ namespace mongo_db {
 
     void mongo_db_writer::write_block_operations(const signed_block& block) {
 
-        ilog("mongo_db_writer::write_block_operations");
+        //ilog("mongo_db_writer::write_block_operations ${e}", ("e", block.transactions.size()));
 
         // Now write every transaction from Block
         for (const auto& tran : block.transactions) {
 
             for (const auto& op : tran.operations) {
 
+                ilog("Extracting operation");
                 operation_writer op_writer;
                 op.visit(op_writer);
 
+                ilog("Extracting operation name");
                 operation_name op_name;
                 op.visit(op_name);
+
+                ilog("Operation name ${e}", ("e", op_name.get_result()));
 
                 auto iter = std::find(write_operations.begin(), write_operations.end(), op_name.get_result());
                 if (!write_operations.empty() && iter == write_operations.end()) {
