@@ -96,11 +96,19 @@ namespace mongo_db {
 
     void operation_writer::format_comment(const std::string& auth, const std::string& perm, document& comment_doc) {
 
-        const comment_object* comment_obj_ptr;
+        ilog("MongoDB operation format_comment: ${p} ${e}", ("p", auth)("e", perm));
 
-        comment_obj_ptr =_db.find_comment(auth, perm);
+        const comment_object* comment_obj_ptr = NULL;
+
+        try {
+            comment_obj_ptr = _db.find_comment(auth, perm);
+        }
+        catch (...) {
+            ilog("Unknown exception during formatting comment.");
+        }
 
         if (comment_obj_ptr == NULL) {
+            ilog("Cannot find comment object.");
             return;
         }
 
