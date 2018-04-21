@@ -82,6 +82,10 @@ namespace mongo_db {
         data.reset(new document());
     }
 
+    document_ptr operation_writer::get_document() {
+        return data;
+    }
+
     std::vector<document_ptr> operation_writer::get_documents() {
         if (!data_buffer.empty()) {
             return data_buffer;
@@ -96,7 +100,7 @@ namespace mongo_db {
 
     void operation_writer::format_comment(const std::string& auth, const std::string& perm, document& comment_doc) {
 
-        ilog("MongoDB operation format_comment: ${p} ${e}", ("p", auth)("e", perm));
+        //ilog("MongoDB operation format_comment: ${p} ${e}", ("p", auth)("e", perm));
 
         const comment_object* comment_obj_ptr = NULL;
 
@@ -988,7 +992,9 @@ namespace mongo_db {
     }
 
     void operation_name::operator()(const comment_operation &op) {
-        result = "comment";
+        // This operation is parsed into 2 comment_object andcomment_operation
+        // in operation_parser
+        result = "comment_operation";
     }
 
     void operation_name::operator()(const transfer_operation &op) {
@@ -1191,4 +1197,39 @@ namespace mongo_db {
         result = "comment_benefactor_reward_operation";
     }
 
+
+    operation_parser::operation_parser(const operation& op) : oper(op) {
+
+        operation_writer op_writer;
+        op.visit(op_writer);
+
+        if (!op_writer.single_document()) {
+            std::vector<document_ptr> docs = op_writer.get_documents();
+            // Okay this looks very ugly but for now we got only 1 operations
+            // that has 2 separate documents for different collections inside
+
+            if (docs.size() == 2) {
+                named_doc_ptr doc1(new named_document());
+                doc1->doc = docs[0];
+                doc1->collection_name = "comment_object";
+                documents.push_back(doc1);
+
+                named_doc_ptr doc2(new named_document());
+                doc2->doc = docs[1];
+                doc2->collection_name = "comment_operation";
+                documents.push_back(doc2);
+            }
+        }
+        else {
+            named_doc_ptr doc1(new named_document());
+            doc1->doc = op_writer.get_document();
+
+            operation_name op_name;
+            op.visit(op_name);
+
+            doc1->collection_name = op_name.get_result();
+
+            documents.push_back(doc1);
+        }
+    }
 }}}

@@ -1,5 +1,6 @@
 #pragma once
 #include <golos/protocol/operations.hpp>
+#include <golos/chain/database.hpp>
 
 #include <bsoncxx/builder/basic/kvp.hpp>
 #include <bsoncxx/builder/basic/document.hpp>
@@ -12,7 +13,6 @@
 #include <mongocxx/instance.hpp>
 #include <mongocxx/stdx.hpp>
 #include <mongocxx/uri.hpp>
-#include <libraries/chain/include/golos/chain/database.hpp>
 
 
 namespace golos {
@@ -25,6 +25,14 @@ namespace mongo_db {
 
     using document_ptr = std::shared_ptr<document>;
 
+    struct named_document {
+        named_document() = default;
+        document_ptr doc;
+        std::string collection_name;
+    };
+
+    using named_doc_ptr = std::shared_ptr<named_document>;
+
     class operation_writer {
     public:
 
@@ -32,7 +40,9 @@ namespace mongo_db {
 
         typedef void result_type;
 
+        document_ptr get_document();
         std::vector<document_ptr> get_documents();
+        bool single_document() const { return data_buffer.empty(); }
 
         void format_comment(const std::string& auth, const std::string& perm, document& comment_doc);
         void format_comment_active_votes(const comment_object& comm, document& doc);
@@ -163,5 +173,13 @@ namespace mongo_db {
         std::string get_result() const;
     private:
         std::string result;
+    };
+
+    class operation_parser {
+    public:
+        operation_parser(const operation& op);
+
+        std::vector<named_doc_ptr> documents;
+        const operation& oper;
     };
 }}}

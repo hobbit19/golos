@@ -59,7 +59,7 @@ namespace mongo_db {
 
         try {
 
-            ilog("MongoDB mongo_db_writer::on_block processed blocks: ${e}", ("e", processed_blocks));
+            //ilog("MongoDB mongo_db_writer::on_block processed blocks: ${e}", ("e", processed_blocks));
 
             _blocks[block.block_num()] = block;
 
@@ -118,13 +118,10 @@ namespace mongo_db {
                 for (const auto& op : tran.operations) {
 
                     try {
-                        operation_writer op_writer;
-                        op.visit(op_writer);
+                        operation_parser op_parser(op);
 
-                        std::vector<document_ptr> docs = op_writer.get_documents();
-
-                        for (document_ptr doc : docs) {
-                            operations_array << *doc;
+                        for (named_doc_ptr doc : op_parser.documents) {
+                            operations_array << *doc->doc;
                         }
                     }
                     catch (fc::exception& ex) {
@@ -160,39 +157,46 @@ namespace mongo_db {
 
     void mongo_db_writer::write_block_operations(const signed_block& block) {
 
-        ilog("mongo_db_writer::write_block_operations ${e}", ("e", block.block_num()));
+        //ilog("mongo_db_writer::write_block_operations ${e}", ("e", block.block_num()));
 
         // Now write every transaction from Block
         for (const auto& tran : block.transactions) {
 
             for (const auto& op : tran.operations) {
 
-                ilog("Processing operation: ${e}", ("e", op.which()));
+                //ilog("Processing operation: ${e}", ("e", op.which()));
 
-                operation_writer op_writer;
-                op.visit(op_writer);
+                operation_parser op_parser(op);
 
-                operation_name op_name;
-                op.visit(op_name);
-
-                auto iter = std::find(write_operations.begin(), write_operations.end(), op_name.get_result());
-                if (!write_operations.empty() && iter == write_operations.end()) {
+                bool skip_operation = true;
+                if (!write_operations.empty()) {
+                    for (auto ini_iter: write_operations) {
+                        for (auto op_iter: op_parser.documents) {
+                            if (ini_iter == op_iter->collection_name) {
+                                skip_operation = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+                else {
+                    skip_operation = false;
+                }
+                if (skip_operation) {
                     continue;
                 }
 
-                std::vector<document_ptr> doc_arr = op_writer.get_documents();
-                for (document_ptr doc : doc_arr) {
-                    format_transaction_info(tran, *doc);
-                    format_block_info(block, *doc);
+                for (named_doc_ptr named_doc : op_parser.documents) {
+                    format_transaction_info(tran, *named_doc->doc);
+                    format_block_info(block, *named_doc->doc);
 
-                    if (_formatted_blocks.find(op_name.get_result()) == _formatted_blocks.end()) {
+                    if (_formatted_blocks.find(named_doc->collection_name) == _formatted_blocks.end()) {
                         std::shared_ptr<mongocxx::bulk_write> write(new mongocxx::bulk_write(bulk_opts));
-                        _formatted_blocks[op_name.get_result()] = write;
+                        _formatted_blocks[named_doc->collection_name] = write;
                     }
 
-                    mongocxx::model::insert_one insert_msg{doc->view()};
-                    _formatted_blocks[op_name.get_result()]->append(insert_msg);
-
+                    mongocxx::model::insert_one insert_msg{named_doc->doc->view()};
+                    _formatted_blocks[named_doc->collection_name]->append(insert_msg);
                 }
             }
         }
@@ -200,7 +204,7 @@ namespace mongo_db {
 
     void mongo_db_writer::format_block_info(const signed_block& block, document& doc) {
 
-        ilog("mongo_db_writer::format_block_info");
+        //ilog("mongo_db_writer::format_block_info");
 
         doc << "block_num"              << std::to_string(block.block_num())
             << "block_id"               << block.id().str()
@@ -212,7 +216,7 @@ namespace mongo_db {
 
     void mongo_db_writer::format_transaction_info(const signed_transaction& tran, document& doc) {
 
-        ilog("mongo_db_writer::format_transaction_info");
+        //ilog("mongo_db_writer::format_transaction_info");
 
         doc << "transaction_id"             << tran.id().str()
             << "transaction_ref_block_num"  << std::to_string(tran.ref_block_num)
@@ -221,7 +225,7 @@ namespace mongo_db {
 
     void mongo_db_writer::write_data() {
 
-        ilog("mongo_db_writer::write_data");
+        //ilog("mongo_db_writer::write_data");
 
         auto iter = _formatted_blocks.begin();
         for (; iter != _formatted_blocks.end(); ++iter) {
