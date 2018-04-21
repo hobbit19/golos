@@ -34,7 +34,7 @@ namespace mongo_db {
 
     bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op) {
         try {
-            ilog("Initializing MongoDB writer.");
+            ilog("Initializing MongoDB writer. ${e} ${p}", ("e", write_raw)("p", op.size()));
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
             db_name = uri.database().empty() ? "Golos" : uri.database();
@@ -61,7 +61,7 @@ namespace mongo_db {
 
         try {
 
-            ilog("MongoDB mongo_db_writer::on_block");
+            ilog("MongoDB mongo_db_writer::on_block processed blocks: ${e}", ("e", processed_blocks));
 
             _blocks[block.block_num()] = block;
 
@@ -99,7 +99,7 @@ namespace mongo_db {
 
     void mongo_db_writer::write_raw_block(const signed_block& block) {
 
-        ilog("mongo_db_writer::write_raw_block");
+        ilog("mongo_db_writer::write_raw_block ${e}", ("e", block.block_num()));
 
         document block_doc;
         format_block_info(block, block_doc);
@@ -162,6 +162,8 @@ namespace mongo_db {
 
     void mongo_db_writer::write_block_operations(const signed_block& block) {
 
+        ilog("mongo_db_writer::write_block_operations");
+
         // Now write every transaction from Block
         for (const auto& tran : block.transactions) {
 
@@ -198,6 +200,8 @@ namespace mongo_db {
 
     void mongo_db_writer::format_block_info(const signed_block& block, document& doc) {
 
+        ilog("mongo_db_writer::format_block_info");
+
         doc << "block_num"              << std::to_string(block.block_num())
             << "block_id"               << block.id().str()
             << "block_prev_block_id"    << block.previous.str()
@@ -208,12 +212,16 @@ namespace mongo_db {
 
     void mongo_db_writer::format_transaction_info(const signed_transaction& tran, document& doc) {
 
+        ilog("mongo_db_writer::format_transaction_info");
+
         doc << "transaction_id"             << tran.id().str()
             << "transaction_ref_block_num"  << std::to_string(tran.ref_block_num)
             << "transaction_expiration"     << tran.expiration;
     }
 
     void mongo_db_writer::write_data() {
+
+        ilog("mongo_db_writer::write_data");
 
         auto iter = _formatted_blocks.begin();
         for (; iter != _formatted_blocks.end(); ++iter) {
