@@ -26,6 +26,7 @@ namespace mongo_db {
 
     mongo_db_writer::mongo_db_writer() :
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
+        ilog("MongoDB writer ctor.");
     }
 
     mongo_db_writer::~mongo_db_writer() {
@@ -33,6 +34,7 @@ namespace mongo_db {
 
     bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op) {
         try {
+            ilog("Initializing MongoDB writer.");
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
             db_name = uri.database().empty() ? "Golos" : uri.database();
@@ -41,7 +43,7 @@ namespace mongo_db {
             write_raw_blocks = write_raw;
             write_operations = op;
 
-            ilog("MongoDB plugin initialized.");
+            ilog("MongoDB writer initialized.");
 
             return true;
         }
@@ -50,7 +52,7 @@ namespace mongo_db {
             return false;
         }
         catch (...) {
-            ilog("Unknown exception in MongoDB");
+            ilog("Unknown exception in MongoDB writer");
             return false;
         }
     }
@@ -58,6 +60,8 @@ namespace mongo_db {
     void mongo_db_writer::on_block(const signed_block& block) {
 
         try {
+
+            ilog("MongoDB mongo_db_writer::on_block");
 
             _blocks[block.block_num()] = block;
 
@@ -95,7 +99,7 @@ namespace mongo_db {
 
     void mongo_db_writer::write_raw_block(const signed_block& block) {
 
-        //ilog("mongo_db_writer::write_raw_block");
+        ilog("mongo_db_writer::write_raw_block");
 
         document block_doc;
         format_block_info(block, block_doc);
