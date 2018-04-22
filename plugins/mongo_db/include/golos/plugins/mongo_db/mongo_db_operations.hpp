@@ -45,9 +45,9 @@ namespace mongo_db {
         std::vector<document_ptr> get_documents();
         bool single_document() const { return data_buffer.empty(); }
 
-        void format_comment(const std::string& auth, const std::string& perm, document& comment_doc);
-        void format_comment_active_votes(const comment_object& comm, document& doc);
-        void format_reblogged_by(const comment_object& comm, document& doc);
+        void format_comment(document& comment_doc, const std::string& auth, const std::string& perm);
+        void format_comment_active_votes(document& doc, const comment_object& comm);
+        void format_reblogged_by(document& doc, const comment_object& comm);
 
         std::string get_account_reputation(const account_name_type& account);
 
