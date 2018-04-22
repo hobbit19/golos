@@ -124,7 +124,7 @@ namespace mongo_db {
             format_value(comment_doc, "created", comment_obj.created.to_iso_string());
             format_asset(comment_obj.curator_payout_value, comment_doc, "curator_payout_value");
             format_value(comment_doc, "depth", std::to_string(comment_obj.depth));
-            format_value(comment_doc, "id", std::to_string(comment_obj.id._id));
+            format_value(comment_doc, "_id", std::to_string(comment_obj.id._id));
             format_value(comment_doc, "last_payout", comment_obj.last_payout.to_iso_string());
             format_value(comment_doc, "last_update", comment_obj.last_update.to_iso_string());
             format_asset(comment_obj.max_accepted_payout, comment_doc, "max_accepted_payout");
