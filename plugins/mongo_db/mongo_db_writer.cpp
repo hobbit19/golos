@@ -20,10 +20,6 @@ namespace mongo_db {
     using bsoncxx::builder::stream::array;
     using bsoncxx::builder::basic::kvp;
 
-    const std::string mongo_db_writer::blocks = "Blocks";
-    const std::string mongo_db_writer::transactions = "Transactions";
-    const std::string mongo_db_writer::operations = "Operations";
-
     mongo_db_writer::mongo_db_writer() :
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
     }
@@ -120,7 +116,7 @@ namespace mongo_db {
                     try {
                         operation_parser op_parser(op);
 
-                        for (named_doc_ptr doc : op_parser.documents) {
+                        for (named_doc_ptr& doc : op_parser.documents) {
                             operations_array << *doc->doc;
                         }
                     }
@@ -138,17 +134,19 @@ namespace mongo_db {
                     }
                 }
 
+                static const std::string operations = "Operations";
                 tran_doc << operations << operations_array;
             }
 
             transactions_array << tran_doc;
         }
 
+        static const std::string transactions = "Transactions";
         block_doc << transactions << transactions_array;
 
+        static const std::string blocks = "Blocks";
         if (_formatted_blocks.find(blocks) == _formatted_blocks.end()) {
-            std::shared_ptr<mongocxx::bulk_write> write(new mongocxx::bulk_write(bulk_opts));
-            _formatted_blocks[blocks] = write;
+            _formatted_blocks[blocks] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
         }
 
         mongocxx::model::insert_one insert_msg{block_doc.view()};
@@ -170,8 +168,8 @@ namespace mongo_db {
 
                 bool skip_operation = true;
                 if (!write_operations.empty()) {
-                    for (auto ini_iter: write_operations) {
-                        for (auto op_iter: op_parser.documents) {
+                    for (auto& ini_iter: write_operations) {
+                        for (auto& op_iter: op_parser.documents) {
                             if (ini_iter == op_iter->collection_name) {
                                 skip_operation = false;
                                 break;
@@ -186,13 +184,12 @@ namespace mongo_db {
                     continue;
                 }
 
-                for (named_doc_ptr named_doc : op_parser.documents) {
+                for (auto& named_doc : op_parser.documents) {
                     format_transaction_info(tran, *named_doc->doc);
                     format_block_info(block, *named_doc->doc);
 
                     if (_formatted_blocks.find(named_doc->collection_name) == _formatted_blocks.end()) {
-                        std::shared_ptr<mongocxx::bulk_write> write(new mongocxx::bulk_write(bulk_opts));
-                        _formatted_blocks[named_doc->collection_name] = write;
+                        _formatted_blocks[named_doc->collection_name] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
                     }
 
                     mongocxx::model::insert_one insert_msg{named_doc->doc->view()};
@@ -230,12 +227,12 @@ namespace mongo_db {
         auto iter = _formatted_blocks.begin();
         for (; iter != _formatted_blocks.end(); ++iter) {
 
-            auto oper = *iter;
+            auto& oper = *iter;
             try {
                 const std::string& collection_name = oper.first;
                 mongocxx::collection _collection = get_active_collection(collection_name);
 
-                bulk_ptr bulkp = oper.second;
+                auto& bulkp = oper.second;
                 if (!_collection.bulk_write(*bulkp)) {
                     ilog("Failed to write blocks to Mongo DB");
                 }

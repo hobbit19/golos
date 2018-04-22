@@ -22,14 +22,14 @@ namespace mongo_db {
     // Helper functions
     document format_authority(const authority& auth) {
         array account_auths_arr;
-        for (auto iter : auth.account_auths) {
+        for (const auto& iter : auth.account_auths) {
             document temp;
             temp << "public_key_type" << (std::string)iter.first
                  << "weight_type" << std::to_string(iter.second);
             account_auths_arr << temp;
         }
         array key_auths_arr;
-        for (auto iter : auth.key_auths) {
+        for (auto& iter : auth.key_auths) {
             document temp;
             temp << "public_key_type" << (std::string)iter.first
                  << "weight_type" << std::to_string(iter.second);
@@ -79,7 +79,7 @@ namespace mongo_db {
 
     operation_writer::operation_writer() :
             _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
-        data.reset(new document());
+        data = std::make_shared<document>();
     }
 
     document_ptr operation_writer::get_document() {
@@ -109,12 +109,11 @@ namespace mongo_db {
             format_value(comment_doc, "permlink", comment_obj.permlink.c_str());
             format_value(comment_doc, "abs_rshares", comment_obj.abs_rshares);
             format_value(comment_doc, "active", comment_obj.active.to_iso_string());
-            format_comment_active_votes(comment_obj, comment_doc);
+
             format_value(comment_doc, "allow_curation_rewards", (comment_obj.allow_curation_rewards ? "true" : "false"));
             format_value(comment_doc, "allow_replies", (comment_obj.allow_replies ? "true" : "false"));
             format_value(comment_doc, "allow_votes", (comment_obj.allow_votes ? "true" : "false"));
             format_value(comment_doc, "author_rewards", comment_obj.author_rewards);
-            format_value(comment_doc, "author_reputation", get_account_reputation(comment_obj.author));
             format_value(comment_doc, "body", comment_obj.body.c_str());
             format_value(comment_doc, "body_length", std::to_string(comment_obj.body.length()));
             format_value(comment_doc, "cashout_time", comment_obj.cashout_time.to_iso_string());
@@ -151,8 +150,6 @@ namespace mongo_db {
             format_value(comment_doc, "parent_permlink", comment_obj.parent_permlink.c_str());
             // pending_payout_value
             format_value(comment_doc, "percent_steem_dollars", std::to_string(comment_obj.percent_steem_dollars));
-            // promoted
-            format_reblogged_by(comment_obj, comment_doc);
             // replies
             format_value(comment_doc, "reward_weight", std::to_string(comment_obj.reward_weight));
             format_value(comment_doc, "root_comment", std::to_string(comment_obj.root_comment._id));
@@ -167,6 +164,12 @@ namespace mongo_db {
             // last_reply
             // last_reply_by
             format_value(comment_doc, "json_metadata", comment_obj.json_metadata.c_str());
+
+            format_comment_active_votes(comment_obj, comment_doc);
+
+            // TODO: the following fields depends on follow-plugin operations - custom_json ...
+            // format_value(comment_doc, "author_reputation", get_account_reputation(comment_obj.author));
+            // format_reblogged_by(comment_obj, comment_doc);
         }
         catch (fc::exception& ex) {
             ilog("MongoDB operations fc::exception. ${e}", ("e", ex.what()));
@@ -183,7 +186,7 @@ namespace mongo_db {
         comment_object::id_type cid(comment.id);
         auto itr = idx.lower_bound(cid);
 
-        while (itr != idx.end() && itr->comment == cid) {
+        for (; itr != idx.end() && itr->comment == cid; ++itr) {
 
             document vote_doc;
 
@@ -194,37 +197,41 @@ namespace mongo_db {
             format_value(vote_doc, "rshares", std::to_string(itr->rshares));
             format_value(vote_doc, "percent", std::to_string(itr->vote_percent));
             format_value(vote_doc, "time", itr->last_update.to_iso_string());
-            format_value(vote_doc, "reputation", get_account_reputation(vo.name));
+            //format_value(vote_doc, "reputation", get_account_reputation(vo.name));
 
             votes << vote_doc;
-
-            ++itr;
         }
 
         doc << "active_votes" << votes;
     }
 
     void operation_writer::format_reblogged_by(const comment_object& comm, document& doc) {
+        // depends on the follow-plugin
+        if (!_db.has_index<blog_index>()) {
+            return;
+        }
+
+        const auto& blog_idx = _db.get_index<blog_index, by_comment>();
 
         array result;
 
-        const auto &post = _db.get_comment(comm.author, comm.permlink);
-        const auto &blog_idx = _db.get_index<blog_index, by_comment>();
-        auto itr = blog_idx.lower_bound(post.id);
+        auto itr = blog_idx.lower_bound(comm.id);
 
         int arr_size = 0;
-        while (itr != blog_idx.end() && itr->comment == post.id && ++arr_size < 2000) {
-
+        for (; itr != blog_idx.end() && itr->comment == comm.id && ++arr_size < 2000; ++itr) {
             result << itr->account;
-            ++itr;
         }
 
         doc << "reblogged_by" << result;
     }
 
     std::string operation_writer::get_account_reputation(const account_name_type& account) {
+        // depends on the follow-plugin
+        if (!_db.has_index<reputation_index>()) {
+            return "0";
+        }
 
-        auto &rep_idx = _db.get_index<reputation_index>().indices().get<by_account>();
+        const auto& rep_idx = _db.get_index<reputation_index>().indices().get<by_account>();
         auto itr = rep_idx.find(account);
 
         if (rep_idx.end() != itr) {
@@ -367,6 +374,8 @@ namespace mongo_db {
     void operation_writer::operator()(const account_create_operation &op) {
         document body;
 
+        // TODO: account collection
+
         log_operation("account_create");
 
         format_value(body, "fee", op.fee.to_string());
@@ -382,6 +391,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const account_update_operation &op) {
         document body;
+
+        // TODO: account collection
 
         log_operation("account_update");
 
@@ -417,6 +428,9 @@ namespace mongo_db {
     }
 
     void operation_writer::operator()(const witness_update_operation &op) {
+
+        //TODO: witness collection
+
         document body;
 
         log_operation("witness_update");
@@ -431,6 +445,8 @@ namespace mongo_db {
     }
 
     void operation_writer::operator()(const account_witness_vote_operation &op) {
+
+        // TODO: witness collection
         document body;
 
         log_operation("account_witness_vote");
@@ -443,6 +459,7 @@ namespace mongo_db {
     }
 
     void operation_writer::operator()(const account_witness_proxy_operation &op) {
+        // TODO: witness collection
         document body;
 
         log_operation("account_witness_proxy");
@@ -519,7 +536,7 @@ namespace mongo_db {
 
         log_operation("delete_comment");
 
-        format_comment(op.author, op.permlink, body);
+        // TODO: remove comment - can't call format_comment
 
         *data << "delete_comment" << body;
     }
@@ -832,6 +849,8 @@ namespace mongo_db {
     void operation_writer::operator()(const author_reward_operation &op) {
         document body;
 
+        // TODO: author rewards collection
+
         log_operation("author_reward");
 
         format_value(body, "author", op.author);
@@ -846,6 +865,8 @@ namespace mongo_db {
     void operation_writer::operator()(const curation_reward_operation &op) {
         document body;
 
+        // TODO: curation rewards collection
+
         log_operation("curation_reward");
 
         format_value(body, "curator", op.curator);
@@ -858,6 +879,8 @@ namespace mongo_db {
 
     void operation_writer::operator()(const comment_reward_operation &op) {
         document body;
+
+        // TODO: comment rewards collection
 
         log_operation("comment_reward");
 
@@ -965,6 +988,8 @@ namespace mongo_db {
     void operation_writer::operator()(const comment_benefactor_reward_operation& op) {
         document body;
 
+        // TODO: beneficiar rewards collection
+
         log_operation("comment_benefactor_reward_operation");
 
         format_value(body, "benefactor", op.benefactor);
@@ -977,218 +1002,214 @@ namespace mongo_db {
 
     /////////////////////////////////////////////////
 
-    std::string operation_name::get_result() const {
-        return result;
+    std::string operation_name::operator()(const vote_operation &op) const {
+        return "vote";
     }
 
-    void operation_name::operator()(const vote_operation &op) {
-        result = "vote";
-    }
-
-    void operation_name::operator()(const comment_operation &op) {
+    std::string operation_name::operator()(const comment_operation &op) const {
         // This operation is parsed into 2 comment_object andcomment_operation
         // in operation_parser
-        result = "comment_operation";
+        return "comment_operation";
     }
 
-    void operation_name::operator()(const transfer_operation &op) {
-        result = "transfer";
+    std::string operation_name::operator()(const transfer_operation &op) const {
+        return "transfer";
     }
 
-    void operation_name::operator()(const transfer_to_vesting_operation &op) {
-        result = "transfer_to_vesting";
+    std::string operation_name::operator()(const transfer_to_vesting_operation &op) const {
+        return "transfer_to_vesting";
     }
 
-    void operation_name::operator()(const withdraw_vesting_operation &op) {
-        result = "withdraw_vesting";
+    std::string operation_name::operator()(const withdraw_vesting_operation &op) const {
+        return "withdraw_vesting";
     }
 
-    void operation_name::operator()(const limit_order_create_operation &op) {
-        result = "limit_order_create";
+    std::string operation_name::operator()(const limit_order_create_operation &op) const {
+        return "limit_order_create";
     }
 
-    void operation_name::operator()(const limit_order_cancel_operation &op) {
-        result = "limit_order_cancel";
+    std::string operation_name::operator()(const limit_order_cancel_operation &op) const {
+        return "limit_order_cancel";
     }
 
-    void operation_name::operator()(const feed_publish_operation &op) {
-        result = "feed_publish";
+    std::string operation_name::operator()(const feed_publish_operation &op) const {
+        return "feed_publish";
     }
 
-    void operation_name::operator()(const convert_operation &op) {
-        result = "convert";
+    std::string operation_name::operator()(const convert_operation &op) const {
+        return "convert";
     }
 
-    void operation_name::operator()(const account_create_operation &op) {
-        result = "account_create";
+    std::string operation_name::operator()(const account_create_operation &op) const {
+        return "account_create";
     }
 
-    void operation_name::operator()(const account_update_operation &op) {
-        result = "account_update";
+    std::string operation_name::operator()(const account_update_operation &op) const {
+        return "account_update";
     }
 
-    void operation_name::operator()(const witness_update_operation &op) {
-        result = "witness_update";
+    std::string operation_name::operator()(const witness_update_operation &op) const {
+        return "witness_update";
     }
 
-    void operation_name::operator()(const account_witness_vote_operation &op) {
-        result = "account_witness_vote";
+    std::string operation_name::operator()(const account_witness_vote_operation &op) const {
+        return "account_witness_vote";
     }
 
-    void operation_name::operator()(const account_witness_proxy_operation &op) {
-        result = "account_witness_proxy";
+    std::string operation_name::operator()(const account_witness_proxy_operation &op) const {
+        return "account_witness_proxy";
     }
 
-    void operation_name::operator()(const pow_operation &op) {
-        result = "pow";
+    std::string operation_name::operator()(const pow_operation &op) const {
+        return "pow";
     }
 
-    void operation_name::operator()(const custom_operation &op) {
-        result = "custom";
+    std::string operation_name::operator()(const custom_operation &op) const {
+        return "custom";
     }
 
-    void operation_name::operator()(const report_over_production_operation &op) {
-        result = "report_over_production";
+    std::string operation_name::operator()(const report_over_production_operation &op) const {
+        return "report_over_production";
     }
 
-    void operation_name::operator()(const delete_comment_operation &op) {
-        result = "delete_comment";
+    std::string operation_name::operator()(const delete_comment_operation &op) const {
+        return "delete_comment";
     }
 
-    void operation_name::operator()(const custom_json_operation &op) {
-        result = "custom_json";
+    std::string operation_name::operator()(const custom_json_operation &op) const {
+        return "custom_json";
     }
 
-    void operation_name::operator()(const comment_options_operation &op) {
-        result = "comment_options";
+    std::string operation_name::operator()(const comment_options_operation &op) const {
+        return "comment_options";
     }
 
-    void operation_name::operator()(const set_withdraw_vesting_route_operation &op) {
-        result = "set_withdraw_vesting_route";
+    std::string operation_name::operator()(const set_withdraw_vesting_route_operation &op) const {
+        return "set_withdraw_vesting_route";
     }
 
-    void operation_name::operator()(const limit_order_create2_operation &op) {
-        result = "limit_order_create2";
+    std::string operation_name::operator()(const limit_order_create2_operation &op) const {
+        return "limit_order_create2";
     }
 
-    void operation_name::operator()(const challenge_authority_operation &op) {
-        result = "challenge_authority";
+    std::string operation_name::operator()(const challenge_authority_operation &op) const {
+        return "challenge_authority";
     }
 
-    void operation_name::operator()(const prove_authority_operation &op) {
-        result = "prove_authority";
+    std::string operation_name::operator()(const prove_authority_operation &op) const {
+        return "prove_authority";
     }
 
-    void operation_name::operator()(const request_account_recovery_operation &op) {
-        result = "request_account_recovery";
+    std::string operation_name::operator()(const request_account_recovery_operation &op) const {
+        return "request_account_recovery";
     }
 
-    void operation_name::operator()(const recover_account_operation &op) {
-        result = "recover_account";
+    std::string operation_name::operator()(const recover_account_operation &op) const {
+        return "recover_account";
     }
 
-    void operation_name::operator()(const change_recovery_account_operation &op) {
-        result = "change_recovery_account";
+    std::string operation_name::operator()(const change_recovery_account_operation &op) const {
+        return "change_recovery_account";
     }
 
-    void operation_name::operator()(const escrow_transfer_operation &op) {
-        result = "escrow_transfer";
+    std::string operation_name::operator()(const escrow_transfer_operation &op) const {
+        return "escrow_transfer";
     }
 
-    void operation_name::operator()(const escrow_dispute_operation &op) {
-        result = "escrow_dispute";
+    std::string operation_name::operator()(const escrow_dispute_operation &op) const {
+        return "escrow_dispute";
     }
 
-    void operation_name::operator()(const escrow_release_operation &op) {
-        result = "escrow_release";
+    std::string operation_name::operator()(const escrow_release_operation &op) const {
+        return "escrow_release";
     }
 
-    void operation_name::operator()(const pow2_operation &op) {
-        result = "pow2";
+    std::string operation_name::operator()(const pow2_operation &op) const {
+        return "pow2";
     }
 
-    void operation_name::operator()(const escrow_approve_operation &op) {
-        result = "escrow_approve";
+    std::string operation_name::operator()(const escrow_approve_operation &op) const {
+        return "escrow_approve";
     }
 
-    void operation_name::operator()(const transfer_to_savings_operation &op) {
-        result = "transfer_to_savings";
+    std::string operation_name::operator()(const transfer_to_savings_operation &op) const {
+        return "transfer_to_savings";
     }
 
-    void operation_name::operator()(const transfer_from_savings_operation &op) {
-        result = "transfer_from_savings";
+    std::string operation_name::operator()(const transfer_from_savings_operation &op) const {
+        return "transfer_from_savings";
     }
 
-    void operation_name::operator()(const cancel_transfer_from_savings_operation &op) {
-        result = "cancel_transfer_from_savings";
+    std::string operation_name::operator()(const cancel_transfer_from_savings_operation &op) const {
+        return "cancel_transfer_from_savings";
     }
 
-    void operation_name::operator()(const custom_binary_operation &op) {
-        result = "custom_binary";
+    std::string operation_name::operator()(const custom_binary_operation &op) const {
+        return "custom_binary";
     }
 
-    void operation_name::operator()(const decline_voting_rights_operation &op) {
-        result = "decline_voting_rights";
+    std::string operation_name::operator()(const decline_voting_rights_operation &op) const {
+        return "decline_voting_rights";
     }
 
-    void operation_name::operator()(const reset_account_operation &op) {
-        result = "reset_account";
+    std::string operation_name::operator()(const reset_account_operation &op) const {
+        return "reset_account";
     }
 
-    void operation_name::operator()(const set_reset_account_operation &op) {
-        result = "set_reset_account";
+    std::string operation_name::operator()(const set_reset_account_operation &op) const {
+        return "set_reset_account";
     }
 
-    void operation_name::operator()(const fill_convert_request_operation &op) {
-        result = "fill_convert_request";
+    std::string operation_name::operator()(const fill_convert_request_operation &op) const {
+        return "fill_convert_request";
     }
 
-    void operation_name::operator()(const author_reward_operation &op) {
-        result = "author_reward";
+    std::string operation_name::operator()(const author_reward_operation &op) const {
+        return "author_reward";
     }
 
-    void operation_name::operator()(const curation_reward_operation &op) {
-        result = "curation_reward";
+    std::string operation_name::operator()(const curation_reward_operation &op) const {
+        return "curation_reward";
     }
 
-    void operation_name::operator()(const comment_reward_operation &op) {
-        result = "comment_reward";
+    std::string operation_name::operator()(const comment_reward_operation &op) const {
+        return "comment_reward";
     }
 
-    void operation_name::operator()(const liquidity_reward_operation &op) {
-        result = "liquidity_reward";
+    std::string operation_name::operator()(const liquidity_reward_operation &op) const {
+        return "liquidity_reward";
     }
 
-    void operation_name::operator()(const interest_operation &op) {
-        result = "interest";
+    std::string operation_name::operator()(const interest_operation &op) const {
+        return "interest";
     }
 
-    void operation_name::operator()(const fill_vesting_withdraw_operation &op) {
-        result = "fill_vesting_withdraw";
+    std::string operation_name::operator()(const fill_vesting_withdraw_operation &op) const {
+        return "fill_vesting_withdraw";
     }
 
-    void operation_name::operator()(const fill_order_operation &op) {
-        result = "fill_order";
+    std::string operation_name::operator()(const fill_order_operation &op) const {
+        return "fill_order";
     }
 
-    void operation_name::operator()(const shutdown_witness_operation &op) {
-        result = "shutdown_witness";
+    std::string operation_name::operator()(const shutdown_witness_operation &op) const {
+        return "shutdown_witness";
     }
 
-    void operation_name::operator()(const fill_transfer_from_savings_operation &op) {
-        result = "fill_transfer_from_savings";
+    std::string operation_name::operator()(const fill_transfer_from_savings_operation &op) const {
+        return "fill_transfer_from_savings";
     }
 
-    void operation_name::operator()(const hardfork_operation &op) {
-        result = "hardfork";
+    std::string operation_name::operator()(const hardfork_operation &op) const {
+        return "hardfork";
     }
 
-    void operation_name::operator()(const comment_payout_update_operation &op) {
-        result = "comment_payout_update";
+    std::string operation_name::operator()(const comment_payout_update_operation &op) const {
+        return "comment_payout_update";
     }
 
-    void operation_name::operator()(const comment_benefactor_reward_operation& op) {
-        result = "comment_benefactor_reward_operation";
+    std::string operation_name::operator()(const comment_benefactor_reward_operation& op) const {
+        return "comment_benefactor_reward_operation";
     }
 
 
@@ -1197,33 +1218,32 @@ namespace mongo_db {
         operation_writer op_writer;
         op.visit(op_writer);
 
+        // FIXME: what is happens here ????
+
         if (!op_writer.single_document()) {
             std::vector<document_ptr> docs = op_writer.get_documents();
             // Okay this looks very ugly but for now we got only 1 operations
             // that has 2 separate documents for different collections inside
 
             if (docs.size() == 2) {
-                named_doc_ptr doc1(new named_document());
+                auto doc1 = std::make_unique<named_document>();
                 doc1->doc = docs[0];
                 doc1->collection_name = "comment_object";
-                documents.push_back(doc1);
+                documents.push_back(std::move(doc1));
 
-                named_doc_ptr doc2(new named_document());
+                auto doc2 = std::make_unique<named_document>();
                 doc2->doc = docs[1];
                 doc2->collection_name = "comment_operation";
-                documents.push_back(doc2);
+                documents.push_back(std::move(doc2));
             }
         }
         else {
-            named_doc_ptr doc1(new named_document());
+            auto doc1 = std::make_unique<named_document>();
             doc1->doc = op_writer.get_document();
 
-            operation_name op_name;
-            op.visit(op_name);
+            doc1->collection_name = op.visit(operation_name());
 
-            doc1->collection_name = op_name.get_result();
-
-            documents.push_back(doc1);
+            documents.push_back(std::move(doc1));
         }
     }
 }}}

@@ -12,7 +12,7 @@ namespace plugins {
 namespace mongo_db {
 
     class mongo_db_plugin final : public appbase::plugin<mongo_db_plugin> {
-        public:
+    public:
 
         APPBASE_PLUGIN_REQUIRES(
                 (chain::plugin)
@@ -39,7 +39,7 @@ namespace mongo_db {
             return name;
         }
 
-        private:
+    private:
             class mongo_db_plugin_impl;
 
             std::unique_ptr<mongo_db_plugin_impl> _my;

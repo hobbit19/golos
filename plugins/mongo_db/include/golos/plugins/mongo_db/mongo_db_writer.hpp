@@ -31,7 +31,7 @@ namespace mongo_db {
     using bsoncxx::builder::stream::open_document;
     using namespace golos::protocol;
 
-    using bulk_ptr = std::shared_ptr<mongocxx::bulk_write>;
+    using bulk_ptr = std::unique_ptr<mongocxx::bulk_write>;
 
     class mongo_db_writer final {
     public:
@@ -59,11 +59,6 @@ namespace mongo_db {
 
         uint64_t processed_blocks = 0;
         uint64_t max_collection_size = 1000000;
-
-
-        static const std::string blocks;
-        static const std::string transactions;
-        static const std::string operations;
 
         std::string db_name;
 

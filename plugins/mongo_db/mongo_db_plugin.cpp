@@ -47,19 +47,18 @@ namespace mongo_db {
 
     void mongo_db_plugin::set_program_options(
             boost::program_options::options_description &cli,
-            boost::program_options::options_description &cfg) {
+            boost::program_options::options_description &cfg
+    ) {
         cli.add_options()
-                ("mongodb-uri",
-                 boost::program_options::value<string>()->default_value("mongodb://127.0.0.1:27017/Golos"),
-                "Mongo DB connection string");
-        cli.add_options()
-                ("mongodb-write-raw-blocks",
-                 boost::program_options::value<bool>()->default_value(true),
-                 "Write raw blocks into mongo or not");
-        cli.add_options()
-                ("mongodb-write-operations",
-                 boost::program_options::value<std::vector<std::string>>()->multitoken()->zero_tokens()->composing(),
-                 "List of operations to write into mongo");
+            ("mongodb-uri",
+             boost::program_options::value<string>()->default_value("mongodb://127.0.0.1:27017/Golos"),
+             "Mongo DB connection string");
+            ("mongodb-write-raw-blocks",
+             boost::program_options::value<bool>()->default_value(true),
+             "Write raw blocks into mongo or not");
+            ("mongodb-write-operations",
+             boost::program_options::value<std::vector<std::string>>()->multitoken()->zero_tokens()->composing(),
+             "List of operations to write into mongo");
         cfg.add(cli);
     }
 
@@ -81,7 +80,7 @@ namespace mongo_db {
                 std::string uri_str = options.at("mongodb-uri").as<std::string>();
                 ilog("Connecting MongoDB to ${u}", ("u", uri_str));
 
-                _my.reset(new mongo_db_plugin_impl(*this));
+                _my = std::make_unique<mongo_db_plugin_impl>(*this);
 
                 if (!_my->initialize(uri_str, raw_blocks, write_operations)) {
                     ilog("Cannot initialize MongoDB plugin. Plugin disabled.");
