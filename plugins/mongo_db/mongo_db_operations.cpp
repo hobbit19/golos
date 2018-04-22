@@ -31,32 +31,31 @@ namespace mongo_db {
         doc << name << value;
     }
 
-    void format_value(document& doc, const std::string& name, const int64_t value) {
-        doc << name << value;
-    }
-
-    void format_value(document& doc, const std::string& name, const uint16_t value) {
-        doc << name << static_cast<int64_t>(value);
-    }
-
-    void format_value(document& doc, const std::string& name, const int32_t value) {
-        doc << name << static_cast<int64_t>(value);
-    }
-
-    void format_value(document& doc, const std::string& name, const uint32_t value) {
-        doc << name << static_cast<int64_t>(value);
-    }
-
-    void format_value(document& doc, const std::string& name, const std::size_t value) {
-        format_value(doc, name, static_cast<int64_t>(value));
-    }
-
     void format_value(document& doc, const std::string& name, const bool value) {
         doc << name << value;
     }
 
     void format_value(document& doc, const std::string& name, const double value) {
         doc << name << value;
+    }
+
+    void format_value(document& doc, const std::string& name, const fc::uint128_t& value) {
+        doc << name << static_cast<int64_t>(value.lo);
+    }
+
+    template <typename T>
+    void format_value(document& doc, const std::string& name, const fc::fixed_string<T>& value) {
+        doc << name << static_cast<std::string>(value);
+    }
+
+    template <typename T>
+    void format_value(document& doc, const std::string& name, const T& value) {
+        doc << name << static_cast<int64_t>(value);
+    }
+
+    template <typename T>
+    void format_value(document& doc, const std::string& name, const fc::safe<T>& value) {
+        doc << name << static_cast<int64_t>(value.value);
     }
 
     document format_authority(const authority& auth) {
@@ -360,7 +359,7 @@ namespace mongo_db {
         format_value(body, "orderid", op.orderid);
         format_asset(body, "amount_to_sell", op.amount_to_sell);
         format_asset(body, "min_to_receive", op.min_to_receive);
-        format_value(body, "expiration", op.expiration);
+        format_value(body, "expiration", op.expiration.to_iso_string());
 
         *data << "limit_order_create" << body;
     }
@@ -505,9 +504,9 @@ namespace mongo_db {
 
         document pow_doc;
         format_value(pow_doc, "worker", (std::string)op.work.worker);
-        format_value(pow_doc, "input", op.work.input);
+        format_value(pow_doc, "input", op.work.input.str());
         format_value(pow_doc, "signature", to_string(op.work.signature));
-        format_value(pow_doc, "work", op.work.work);
+        format_value(pow_doc, "work", op.work.work.str());
 
         format_value(body, "block_id", op.block_id.str());
         format_value(body, "worker_account", op.worker_account);
@@ -543,12 +542,12 @@ namespace mongo_db {
 
         document doc1;
         format_value(doc1, "id", op.first_block.id().str());
-        format_value(doc1, "timestamp", op.first_block.timestamp);
+        format_value(doc1, "timestamp", op.first_block.timestamp.to_iso_string());
         format_value(doc1, "witness", op.first_block.witness);
 
         document doc2;
         format_value(doc2, "id", op.second_block.id().str());
-        format_value(doc2, "timestamp", op.first_block.timestamp);
+        format_value(doc2, "timestamp", op.first_block.timestamp.to_iso_string());
         format_value(doc2, "witness", op.second_block.witness);
 
         format_value(body, "reporter", op.reporter);
@@ -613,7 +612,7 @@ namespace mongo_db {
         format_asset(body, "amount_to_sell", op.amount_to_sell);
         format_value(body, "fill_or_kill", op.fill_or_kill);
         format_value(body, "exchange_rate", op.exchange_rate.to_real());
-        format_value(body, "expiration", op.expiration);
+        format_value(body, "expiration", op.expiration.to_iso_string());
 
         *data << "limit_order_create2" << body;
     }
