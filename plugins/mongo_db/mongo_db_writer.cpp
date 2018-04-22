@@ -248,41 +248,44 @@ namespace mongo_db {
     }
 
     mongocxx::collection mongo_db_writer::get_active_collection(const std::string& coll_type) {
+        mongocxx::collection coll = mongo_database[coll_type];
 
-        if (active_collections.find(coll_type) == active_collections.end()) {
-            std::string coll_name = coll_type + std::string("_1");
-            mongocxx::collection coll = mongo_database[coll_name];
-            active_collections[coll_type] = coll;
-            return coll;
-        }
-        else {
-            mongocxx::collection coll = active_collections[coll_type];
-            std::string coll_name = coll.name().to_string();
-
-            const int64_t coll_size = coll.count(document{} << bsoncxx::builder::stream::finalize);
-
-            if (coll_size > max_collection_size) {
-
-                std::string new_coll_name;
-
-                std::string::iterator iter = std::find(coll_name.begin(), coll_name.end(), '_');
-                if (iter != coll_name.end()) {
-                    // Always should be here
-                    std::string coll_num_str = std::string(iter + 1, coll_name.end());
-                    std::istringstream ss(coll_num_str);
-                    int coll_num = 0;
-                    ss >> coll_num;
-                    if (coll_num != 0) {
-                        new_coll_name = coll_type + std::string("_") + std::to_string(coll_num + 1);
-                    }
-                }
-                mongocxx::collection coll = mongo_database[new_coll_name];
-                active_collections[coll_type] = coll;
-                return coll;
-            }
-            else {
-                return active_collections[coll_type];
-            }
-        }
+        return coll;
+//
+//        if (active_collections.find(coll_type) == active_collections.end()) {
+//            std::string coll_name = coll_type + std::string("_1");
+//            mongocxx::collection coll = mongo_database[coll_name];
+//            active_collections[coll_type] = coll;
+//            return coll;
+//        }
+//        else {
+//            mongocxx::collection coll = active_collections[coll_type];
+//            std::string coll_name = coll.name().to_string();
+//
+//            const int64_t coll_size = coll.count(document{} << bsoncxx::builder::stream::finalize);
+//
+//            if (coll_size > max_collection_size) {
+//
+//                std::string new_coll_name;
+//
+//                std::string::iterator iter = std::find(coll_name.begin(), coll_name.end(), '_');
+//                if (iter != coll_name.end()) {
+//                    // Always should be here
+//                    std::string coll_num_str = std::string(iter + 1, coll_name.end());
+//                    std::istringstream ss(coll_num_str);
+//                    int coll_num = 0;
+//                    ss >> coll_num;
+//                    if (coll_num != 0) {
+//                        new_coll_name = coll_type + std::string("_") + std::to_string(coll_num + 1);
+//                    }
+//                }
+//                mongocxx::collection coll = mongo_database[new_coll_name];
+//                active_collections[coll_type] = coll;
+//                return coll;
+//            }
+//            else {
+//                return active_collections[coll_type];
+//            }
+//        }
     }
 }}}

@@ -130,7 +130,7 @@ namespace mongo_db {
         try {
             const comment_object& comment_obj = _db.get_comment(auth, perm);
             auto key = std::string(comment_obj.author).append("/").append(to_string(comment_obj.permlink));
-            const auto hash = fc::sha512::hash(key);
+            const auto hash = fc::sha256::hash(key);
 
             format_value(comment_doc, "author", comment_obj.author);
             format_value(comment_doc, "permlink", to_string(comment_obj.permlink));
@@ -192,7 +192,7 @@ namespace mongo_db {
             // last_reply_by
             format_value(comment_doc, "json_metadata", to_string(comment_obj.json_metadata));
 
-            format_comment_active_votes(comment_doc, comment_obj);
+            // format_comment_active_votes(comment_doc, comment_obj);
 
             // TODO: the following fields depends on follow-plugin operations - custom_json ...
             // format_value(comment_doc, "author_reputation", get_account_reputation(comment_obj.author));
@@ -273,12 +273,26 @@ namespace mongo_db {
 
         log_operation("vote");
 
-        format_comment(body, op.author, op.permlink);
+        try {
+            const comment_object& comment_obj = _db.get_comment(op.author, op.permlink);
+            auto key = std::string(op.author).append("/").append(op.permlink).append("/").append(op.voter);
+            const auto hash = fc::sha256::hash(key);
 
-        format_value(body, "voter", op.voter);
-        format_value(body, "weight", op.weight);
+            format_value(body, "author", op.author);
+            format_value(body, "permlink", op.permlink);
+            format_value(body, "voter", op.voter);
+            format_value(body, "comment", comment_obj.id._id);
+            format_value(body, "_id", hash.str());
+            format_value(body, "weight", op.weight);
 
-        *data << "vote" << body;
+            *data << "vote" << body;
+        }
+        catch (fc::exception& ex) {
+            ilog("MongoDB operations fc::exception. ${e}", ("e", ex.what()));
+        }
+        catch (...) {
+            ilog("Unknown exception during formatting comment.");
+        }
     }
 
     void operation_writer::operator()(const comment_operation &op) {
@@ -586,7 +600,8 @@ namespace mongo_db {
 
         format_comment(body, op.author, op.permlink);
 
-        *data << "comment_options" << body;
+        // *data << "comment_options" << body;
+        *data << "comment_object" << body;
     }
 
     void operation_writer::operator()(const set_withdraw_vesting_route_operation &op) {
@@ -1007,9 +1022,10 @@ namespace mongo_db {
 
         log_operation("comment_payout_update");
 
-        format_comment(body, op.author, op.permlink);
+        // format_comment(body, op.author, op.permlink);
 
-        *data << "comment_payout_update" << body;
+        // *data << "comment_payout_update" << body;
+        *data << "comment_object" << body;
     }
 
     void operation_writer::operator()(const comment_benefactor_reward_operation& op) {
