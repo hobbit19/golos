@@ -95,7 +95,7 @@ namespace mongo_db {
     }
 
     void operation_writer::log_operation(const std::string& name) {
-        ilog("MongoDB operation: ${p}", ("p", name));
+        // ilog("MongoDB operation: ${p}", ("p", name));
     }
 
     void operation_writer::format_comment(const std::string& auth, const std::string& perm, document& comment_doc) {
