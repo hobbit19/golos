@@ -51,6 +51,7 @@ namespace mongo_db {
             format_value(body, "allow_votes", comment.allow_votes);
             format_value(body, "author_rewards", comment.author_rewards);
             format_value(body, "body", comment.body);
+            format_value(body, "beneficiary_payout", comment.beneficiary_payout_value);
             format_value(body, "cashout_time", comment.cashout_time);
             format_value(body, "category", comment.category);
             format_value(body, "children", comment.children);
@@ -74,6 +75,17 @@ namespace mongo_db {
             format_value(body, "total_vote_weight", comment.total_vote_weight);
             format_value(body, "vote_rshares", comment.vote_rshares);
             format_value(body, "json_metadata", comment.json_metadata);
+
+            if (!comment.beneficiaries.empty()) {
+                array ben_array;
+                for (auto& b: comment.beneficiaries) {
+                    document tmp;
+                    format_value(tmp, "account", b.account);
+                    format_value(tmp, "weight", b.weight);
+                    ben_array << tmp;
+                }
+                body << "beneficiaries" << ben_array;
+            }
 
             std::string comment_mode;
             switch (comment.mode) {
