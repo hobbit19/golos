@@ -4,6 +4,8 @@
 #include <golos/protocol/transaction.hpp>
 #include <golos/protocol/operations.hpp>
 
+#include <libraries/chain/include/golos/chain/operation_notification.hpp>
+
 #include <bsoncxx/builder/basic/document.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/builder/stream/array.hpp>
@@ -29,6 +31,7 @@ namespace mongo_db {
     using golos::protocol::signed_transaction;
     using bsoncxx::builder::stream::document;
     using bsoncxx::builder::stream::open_document;
+    using golos::chain::operation_notification;
     using namespace golos::protocol;
 
     using bulk_ptr = std::unique_ptr<mongocxx::bulk_write>;
@@ -41,12 +44,14 @@ namespace mongo_db {
         bool initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op);
 
         void on_block(const signed_block& block);
+        void on_operation(const golos::chain::operation_notification& note);
 
     private:
+        using operations = std::vector<operation_notification>;
 
         void write_blocks();
-        void write_raw_block(const signed_block& block);
-        void write_block_operations(const signed_block& block);
+        void write_raw_block(const signed_block& block, const operations&);
+        void write_block_operations(const signed_block& block, const operations&);
 
         void format_block_info(const signed_block& block, document& doc);
         void format_transaction_info(const signed_transaction& tran, document& doc);
@@ -54,24 +59,19 @@ namespace mongo_db {
         void write_data();
 
 
-        mongocxx::collection get_active_collection(const std::string& collection_name);
-
-
         uint64_t processed_blocks = 0;
-        uint64_t max_collection_size = 1000000;
 
         std::string db_name;
 
         // Key = Block num, Value = block
         uint32_t last_irreversible_block_num;
-        std::map<uint32_t, signed_block> _blocks_buffer;
-        std::map<uint32_t, signed_block> _blocks;
+        std::map<uint32_t, signed_block> blocks;
+        std::map<uint32_t, operations> virtual_ops;
         // Table name, bulk write
-        std::map<std::string, bulk_ptr> _formatted_blocks;
-        std::map<std::string, mongocxx::collection> active_collections;
+        std::map<std::string, bulk_ptr> formatted_blocks;
 
         bool write_raw_blocks;
-        std::vector<std::string> write_operations;
+        flat_set<std::string> write_operations;
 
         // Mongo connection members
         mongocxx::instance mongo_inst;

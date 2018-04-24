@@ -23,12 +23,15 @@ if (libmongoc-1.0_FOUND)
           include/golos/plugins/mongo_db/mongo_db_plugin.hpp
           include/golos/plugins/mongo_db/mongo_db_writer.hpp
           include/golos/plugins/mongo_db/mongo_db_operations.hpp
+          include/golos/plugins/mongo_db/mongo_db_state.hpp
+          include/golos/plugins/mongo_db/mongo_db_types.hpp
           )
 
   list(APPEND CURRENT_TARGET_SOURCES
           mongo_db_plugin.cpp
           mongo_db_writer.cpp
           mongo_db_operations.cpp
+          mongo_db_state.cpp
           )
 
   if(BUILD_SHARED_LIBRARIES)

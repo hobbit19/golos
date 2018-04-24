@@ -1,5 +1,6 @@
 #include <golos/plugins/mongo_db/mongo_db_writer.hpp>
 #include <golos/plugins/mongo_db/mongo_db_operations.hpp>
+#include <golos/plugins/mongo_db/mongo_db_state.hpp>
 #include <golos/plugins/chain/plugin.hpp>
 #include <golos/protocol/operations.hpp>
 
@@ -27,7 +28,7 @@ namespace mongo_db {
     mongo_db_writer::~mongo_db_writer() {
     }
 
-    bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& op) {
+    bool mongo_db_writer::initialize(const std::string& uri_str, const bool write_raw, const std::vector<std::string>& ops) {
         try {
             uri = mongocxx::uri {uri_str};
             mongo_conn = mongocxx::client {uri};
@@ -35,7 +36,12 @@ namespace mongo_db {
             mongo_database = mongo_conn[db_name];
             bulk_opts.ordered(false);
             write_raw_blocks = write_raw;
-            write_operations = op;
+
+            for (auto& op : ops) {
+                if (!op.empty()) {
+                    write_operations.insert(op);
+                }
+            }
 
             ilog("MongoDB writer initialized.");
 
@@ -57,29 +63,31 @@ namespace mongo_db {
 
             //ilog("MongoDB mongo_db_writer::on_block processed blocks: ${e}", ("e", processed_blocks));
 
-            _blocks[block.block_num()] = block;
+            blocks[block.block_num()] = block;
 
             // Update last irreversible block number
             last_irreversible_block_num = _db.last_non_undoable_block_num();
-            if (last_irreversible_block_num >= _blocks.begin()->first) {
+            if (last_irreversible_block_num >= blocks.begin()->first) {
 
                 // Write all the blocks that has num less then last irreversible block
-                while (!_blocks.empty() && _blocks.begin()->first <= last_irreversible_block_num) {
-                    auto head_iter = _blocks.begin();
+                while (!blocks.empty() && blocks.begin()->first <= last_irreversible_block_num) {
+                    auto head_iter = blocks.begin();
 
                     try {
                         if (write_raw_blocks) {
-                            write_raw_block(head_iter->second);
+                            write_raw_block(head_iter->second, virtual_ops[head_iter->first]);
                         }
 
-                        write_block_operations(head_iter->second);
+                        write_block_operations(head_iter->second, virtual_ops[head_iter->first]);
                     }
                     catch (...) {
                         // If some block causes any problems lets remove it from buffer and move on
-                        _blocks.erase(head_iter);
+                        blocks.erase(head_iter);
+                        virtual_ops.erase(head_iter->first);
                         throw;
                     }
-                    _blocks.erase(head_iter);
+                    blocks.erase(head_iter);
+                    virtual_ops.erase(head_iter->first);
                 }
                 write_data();
             }
@@ -91,10 +99,19 @@ namespace mongo_db {
         }
     }
 
-    void mongo_db_writer::write_raw_block(const signed_block& block) {
+    void mongo_db_writer::on_operation(const golos::chain::operation_notification& note) {
+        virtual_ops[note.block].push_back(note);
+        // remove ops if there were forks and rollbacks
+        auto itr = virtual_ops.find(note.block);
+        ++itr;
+        virtual_ops.erase(itr, virtual_ops.end());
+    }
+
+    void mongo_db_writer::write_raw_block(const signed_block& block, const operations& ops) {
 
         //ilog("mongo_db_writer::write_raw_block ${e}", ("e", block.block_num()));
 
+        operation_writer op_writer;
         document block_doc;
         format_block_info(block, block_doc);
 
@@ -114,96 +131,90 @@ namespace mongo_db {
                 for (const auto& op : tran.operations) {
 
                     try {
-                        operation_parser op_parser(op);
-
-                        for (named_doc_ptr& doc : op_parser.documents) {
-                            operations_array << *doc->doc;
-                        }
+                        operations_array << op.visit(op_writer);
                     }
-                    catch (fc::exception& ex) {
-                        ilog("MongoDB write_raw_block fc::exception ${e}", ("e", ex.what()));
-                    }
-                    catch (mongocxx::exception& ex) {
-                        ilog("Mongodb write_raw_block Mongo exception ${e}", ("e", ex.what()));
-                    }
-                    catch (std::exception& ex) {
-                        ilog("Mongodb write_raw_block std exception ${e}", ("e", ex.what()));
-                    }
+//                    catch (fc::exception& ex) {
+//                        ilog("MongoDB write_raw_block fc::exception ${e}", ("e", ex.what()));
+//                    }
+//                    catch (mongocxx::exception& ex) {
+//                        ilog("Mongodb write_raw_block Mongo exception ${e}", ("e", ex.what()));
+//                    }
+//                    catch (std::exception& ex) {
+//                        ilog("Mongodb write_raw_block std exception ${e}", ("e", ex.what()));
+//                    }
                     catch (...) {
-                        ilog("Mongodb write_raw_block unknown exception ");
+                        // ilog("Mongodb write_raw_block unknown exception ");
                     }
                 }
 
-                static const std::string operations = "Operations";
+                static const std::string operations = "operations";
                 tran_doc << operations << operations_array;
             }
 
             transactions_array << tran_doc;
         }
 
-        static const std::string transactions = "Transactions";
+        if (!ops.empty()) {
+            array operations_array;
+            for (auto &note: ops) {
+                try {
+                    operations_array << note.op.visit(op_writer);
+                } catch (...) {
+                    //
+                }
+            }
+            static const std::string operations = "virtual_operations";
+            block_doc << operations << operations_array;
+        }
+
+        static const std::string transactions = "transactions";
         block_doc << transactions << transactions_array;
 
-        static const std::string blocks = "Blocks";
-        if (_formatted_blocks.find(blocks) == _formatted_blocks.end()) {
-            _formatted_blocks[blocks] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
+        static const std::string blocks = "blocks";
+        if (formatted_blocks.find(blocks) == formatted_blocks.end()) {
+            formatted_blocks[blocks] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
         }
 
         mongocxx::model::insert_one insert_msg{block_doc.view()};
-        _formatted_blocks[blocks]->append(insert_msg);
+        formatted_blocks[blocks]->append(insert_msg);
     }
 
-    void mongo_db_writer::write_block_operations(const signed_block& block) {
-
+    void mongo_db_writer::write_block_operations(const signed_block& block, const operations& ops) {
+        state_writer st_writer;
         //ilog("mongo_db_writer::write_block_operations ${e}", ("e", block.block_num()));
 
         // Now write every transaction from Block
         for (const auto& tran : block.transactions) {
 
             for (const auto& op : tran.operations) {
+                auto docs = op.visit(st_writer);
 
-                //ilog("Processing operation: ${e}", ("e", op.which()));
-
-                operation_parser op_parser(op);
-
-                bool skip_operation = true;
-                if (!write_operations.empty()) {
-                    for (auto& ini_iter: write_operations) {
-                        for (auto& op_iter: op_parser.documents) {
-                            if (ini_iter == op_iter->collection_name) {
-                                skip_operation = false;
-                                break;
-                            }
-                        }
-                    }
-                }
-                else {
-                    skip_operation = false;
-                }
-                if (skip_operation) {
-                    continue;
-                }
-
-                for (auto& named_doc : op_parser.documents) {
-                    format_transaction_info(tran, *named_doc->doc);
-                    format_block_info(block, *named_doc->doc);
-
-                    if (_formatted_blocks.find(named_doc->collection_name) == _formatted_blocks.end()) {
-                        _formatted_blocks[named_doc->collection_name] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
+                for (auto& named_doc : docs) {
+                    if (formatted_blocks.find(named_doc->collection_name) == formatted_blocks.end()) {
+                        formatted_blocks[named_doc->collection_name] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
                     }
 
-                    mongocxx::model::insert_one insert_msg{named_doc->doc->view()};
-                    _formatted_blocks[named_doc->collection_name]->append(insert_msg);
+                    mongocxx::model::insert_one insert_msg{named_doc->doc.view()};
+                    formatted_blocks[named_doc->collection_name]->append(insert_msg);
                 }
+            }
+        }
+
+        for (auto &note: ops) {
+            auto docs = note.op.visit(st_writer);
+            for (auto& named_doc : docs) {
+                if (formatted_blocks.find(named_doc->collection_name) == formatted_blocks.end()) {
+                    formatted_blocks[named_doc->collection_name] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
+                }
+
+                mongocxx::model::insert_one insert_msg{named_doc->doc.view()};
+                formatted_blocks[named_doc->collection_name]->append(insert_msg);
             }
         }
     }
 
     void mongo_db_writer::format_block_info(const signed_block& block, document& doc) {
-
-        //ilog("mongo_db_writer::format_block_info");
-
-        doc << "block_num"              << std::to_string(block.block_num())
+        doc << "block_num"              << static_cast<int32_t>(block.block_num())
             << "block_id"               << block.id().str()
             << "block_prev_block_id"    << block.previous.str()
             << "block_timestamp"        << block.timestamp
@@ -212,25 +223,19 @@ namespace mongo_db {
     }
 
     void mongo_db_writer::format_transaction_info(const signed_transaction& tran, document& doc) {
-
-        //ilog("mongo_db_writer::format_transaction_info");
-
         doc << "transaction_id"             << tran.id().str()
-            << "transaction_ref_block_num"  << std::to_string(tran.ref_block_num)
+            << "transaction_ref_block_num"  << static_cast<int32_t>(tran.ref_block_num)
             << "transaction_expiration"     << tran.expiration;
     }
 
     void mongo_db_writer::write_data() {
-
-        //ilog("mongo_db_writer::write_data");
-
-        auto iter = _formatted_blocks.begin();
-        for (; iter != _formatted_blocks.end(); ++iter) {
+        auto iter = formatted_blocks.begin();
+        for (; iter != formatted_blocks.end(); ++iter) {
 
             auto& oper = *iter;
             try {
                 const std::string& collection_name = oper.first;
-                mongocxx::collection _collection = get_active_collection(collection_name);
+                mongocxx::collection _collection = mongo_database[collection_name];
 
                 auto& bulkp = oper.second;
                 if (!_collection.bulk_write(*bulkp)) {
@@ -240,52 +245,10 @@ namespace mongo_db {
             catch (...) {
                 ilog("Unknown exception while writing blocks to mongo");
                 // If we got some errors writing block into mongo just skip this block and move on
-                _formatted_blocks.erase(iter);
+                formatted_blocks.erase(iter);
                 throw;
             }
         }
-        _formatted_blocks.clear();
-    }
-
-    mongocxx::collection mongo_db_writer::get_active_collection(const std::string& coll_type) {
-        mongocxx::collection coll = mongo_database[coll_type];
-
-        return coll;
-//
-//        if (active_collections.find(coll_type) == active_collections.end()) {
-//            std::string coll_name = coll_type + std::string("_1");
-//            mongocxx::collection coll = mongo_database[coll_name];
-//            active_collections[coll_type] = coll;
-//            return coll;
-//        }
-//        else {
-//            mongocxx::collection coll = active_collections[coll_type];
-//            std::string coll_name = coll.name().to_string();
-//
-//            const int64_t coll_size = coll.count(document{} << bsoncxx::builder::stream::finalize);
-//
-//            if (coll_size > max_collection_size) {
-//
-//                std::string new_coll_name;
-//
-//                std::string::iterator iter = std::find(coll_name.begin(), coll_name.end(), '_');
-//                if (iter != coll_name.end()) {
-//                    // Always should be here
-//                    std::string coll_num_str = std::string(iter + 1, coll_name.end());
-//                    std::istringstream ss(coll_num_str);
-//                    int coll_num = 0;
-//                    ss >> coll_num;
-//                    if (coll_num != 0) {
-//                        new_coll_name = coll_type + std::string("_") + std::to_string(coll_num + 1);
-//                    }
-//                }
-//                mongocxx::collection coll = mongo_database[new_coll_name];
-//                active_collections[coll_type] = coll;
-//                return coll;
-//            }
-//            else {
-//                return active_collections[coll_type];
-//            }
-//        }
+        formatted_blocks.clear();
     }
 }}}

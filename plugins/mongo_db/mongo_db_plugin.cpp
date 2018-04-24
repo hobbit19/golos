@@ -14,8 +14,8 @@ namespace mongo_db {
     class mongo_db_plugin::mongo_db_plugin_impl {
     public:
         mongo_db_plugin_impl(mongo_db_plugin &plugin)
-                : _my(plugin),
-                  _db(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
+            : pimpl_(plugin),
+              db_(appbase::app().get_plugin<golos::plugins::chain::plugin>().db()) {
         }
 
         bool initialize(const std::string& uri, const bool write_raw, const std::vector<std::string>& op) {
@@ -24,18 +24,24 @@ namespace mongo_db {
 
         ~mongo_db_plugin_impl() = default;
 
-        void on_block(const signed_block &block) {
+        void on_block(const signed_block& block) {
             writer.on_block(block);
         }
 
+        void on_operation(const golos::chain::operation_notification& note) {
+            if (is_virtual_operation(note.op)) {
+               writer.on_operation(note);
+            }
+        }
+
         golos::chain::database &database() const {
-            return _db;
+            return db_;
         }
 
         mongo_db_writer writer;
-        mongo_db_plugin &_my;
+        mongo_db_plugin &pimpl_;
 
-        golos::chain::database &_db;
+        golos::chain::database &db_;
     };
 
     // Plugin
@@ -46,16 +52,16 @@ namespace mongo_db {
     }
 
     void mongo_db_plugin::set_program_options(
-            boost::program_options::options_description &cli,
-            boost::program_options::options_description &cfg
+        boost::program_options::options_description &cli,
+        boost::program_options::options_description &cfg
     ) {
         cli.add_options()
             ("mongodb-uri",
              boost::program_options::value<string>()->default_value("mongodb://127.0.0.1:27017/Golos"),
-             "Mongo DB connection string");
+             "Mongo DB connection string")
             ("mongodb-write-raw-blocks",
              boost::program_options::value<bool>()->default_value(true),
-             "Write raw blocks into mongo or not");
+             "Write raw blocks into mongo or not")
             ("mongodb-write-operations",
              boost::program_options::value<std::vector<std::string>>()->multitoken()->zero_tokens()->composing(),
              "List of operations to write into mongo");
@@ -80,18 +86,22 @@ namespace mongo_db {
                 std::string uri_str = options.at("mongodb-uri").as<std::string>();
                 ilog("Connecting MongoDB to ${u}", ("u", uri_str));
 
-                _my = std::make_unique<mongo_db_plugin_impl>(*this);
+                pimpl_ = std::make_unique<mongo_db_plugin_impl>(*this);
 
-                if (!_my->initialize(uri_str, raw_blocks, write_operations)) {
+                if (!pimpl_->initialize(uri_str, raw_blocks, write_operations)) {
                     ilog("Cannot initialize MongoDB plugin. Plugin disabled.");
-                    _my.reset();
+                    pimpl_.reset();
                     return;
                 }
                 // Set applied block listener
-                auto &db = _my->database();
+                auto &db = pimpl_->database();
 
                 db.applied_block.connect([&](const signed_block &b) {
-                    _my->on_block(b);
+                    pimpl_->on_block(b);
+                });
+
+                db.post_apply_operation.connect([&](const operation_notification &o) {
+                    pimpl_->on_operation(o);
                 });
 
             } else {
@@ -100,7 +110,7 @@ namespace mongo_db {
 
             ilog("mongo_db plugin: plugin_initialize() end");
         } FC_CAPTURE_AND_RETHROW()
-    }
+    } 
 
     void mongo_db_plugin::plugin_startup() {
         ilog("mongo_db plugin: plugin_startup() begin");

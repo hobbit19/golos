@@ -5,16 +5,15 @@
 
 #include <golos/plugins/mongo_db/mongo_db_types.hpp>
 
-
 namespace golos {
 namespace plugins {
 namespace mongo_db {
 
-    class operation_writer {
+    class state_writer {
     public:
-        using result_type = document;
-        
-        operation_writer();
+        using result_type = std::vector<named_document_ptr>;
+
+        state_writer();
 
         result_type operator()(const vote_operation& op);
         result_type operator()(const comment_operation& op);
@@ -68,6 +67,13 @@ namespace mongo_db {
         result_type operator()(const hardfork_operation& op);
         result_type operator()(const comment_payout_update_operation& op);
         result_type operator()(const comment_benefactor_reward_operation& op);
+
+    private:
+        database &db_;
+
+        result_type format_comment(const std::string& auth, const std::string& perm);
+
+        named_document_ptr create_document(const std::string& name);
     };
 
 }}} // golos::plugins::mongo_db

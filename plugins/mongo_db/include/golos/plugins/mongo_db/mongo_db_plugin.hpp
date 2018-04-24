@@ -15,7 +15,7 @@ namespace mongo_db {
     public:
 
         APPBASE_PLUGIN_REQUIRES(
-                (chain::plugin)
+            (chain::plugin)
         )
 
         mongo_db_plugin();
@@ -23,10 +23,11 @@ namespace mongo_db {
         virtual ~mongo_db_plugin();
 
         void set_program_options(
-                boost::program_options::options_description &cli,
-                boost::program_options::options_description &cfg) override;
+            boost::program_options::options_description& cli,
+            boost::program_options::options_description& cfg
+        ) override;
 
-        void plugin_initialize(const boost::program_options::variables_map &options) override;
+        void plugin_initialize(const boost::program_options::variables_map& options) override;
 
         void plugin_startup() override;
 
@@ -34,16 +35,16 @@ namespace mongo_db {
 
         constexpr const static char *plugin_name = "mongo_db";
 
-        static const std::string &name() {
+        static const std::string& name() {
             static std::string name = plugin_name;
             return name;
         }
 
     private:
-            class mongo_db_plugin_impl;
+        class mongo_db_plugin_impl;
 
-            std::unique_ptr<mongo_db_plugin_impl> _my;
-        };
+        std::unique_ptr<mongo_db_plugin_impl> pimpl_;
+    };
 
 }}} // namespace golos::plugins::mongo_db
 

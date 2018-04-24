@@ -35,12 +35,17 @@ RUN \
     ./configure --disable-automatic-init-and-cleanup --enable-static && \
     make && \
     make install && \
+    cd .. && \
+    rm -rf mongo-c-driver-1.9.3 && \
+    rm -rf mongo-c-driver-1.9.3.tar.gz && \
     git clone https://github.com/mongodb/mongo-cxx-driver.git --branch releases/stable --depth 1 && \
     cd mongo-cxx-driver/build && \
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
     make EP_mnmlstc_core && \
     make && \
     make install && \
+    cd ..\.. && \
+    rm -rf mongo-cxx-driver && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
     pip3 install gcovr
