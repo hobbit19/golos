@@ -94,13 +94,13 @@ namespace mongo_db {
 
             ++processed_blocks;
         }
-        catch (...) {
-            ilog("Unknown exception in MongoDB");
+        catch (const std::exception& e) {
+            ilog("Unknown exception in MongoDB ${e}", ("e", e.what()));
         }
     }
 
     void mongo_db_writer::on_operation(const golos::chain::operation_notification& note) {
-        virtual_ops[note.block].push_back(note);
+        virtual_ops[note.block].push_back(note.op);
         // remove ops if there were forks and rollbacks
         auto itr = virtual_ops.find(note.block);
         ++itr;
@@ -139,11 +139,10 @@ namespace mongo_db {
 //                    catch (mongocxx::exception& ex) {
 //                        ilog("Mongodb write_raw_block Mongo exception ${e}", ("e", ex.what()));
 //                    }
-//                    catch (std::exception& ex) {
-//                        ilog("Mongodb write_raw_block std exception ${e}", ("e", ex.what()));
-//                    }
-                    catch (...) {
-                        // ilog("Mongodb write_raw_block unknown exception ");
+                    catch (std::exception& ex) {
+                        ilog("Mongodb write_raw_block std exception ${e}", ("e", ex.what()));
+                    } catch (...) {
+                        ilog("Mongodb write_raw_block unknown exception ");
                     }
                 }
 
@@ -156,9 +155,9 @@ namespace mongo_db {
 
         if (!ops.empty()) {
             array operations_array;
-            for (auto &note: ops) {
+            for (auto &op: ops) {
                 try {
-                    operations_array << note.op.visit(op_writer);
+                    operations_array << op.visit(op_writer);
                 } catch (...) {
                     //
                 }
@@ -179,6 +178,27 @@ namespace mongo_db {
         formatted_blocks[blocks]->append(insert_msg);
     }
 
+    void mongo_db_writer::write_document(const named_document_ptr& named_doc) {
+        if (formatted_blocks.find(named_doc->collection_name) == formatted_blocks.end()) {
+            formatted_blocks[named_doc->collection_name] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
+        }
+
+        auto view = named_doc->doc.view();
+        auto itr = view.find("_id");
+        if (view.end() == itr) {
+            mongocxx::model::insert_one msg{std::move(view)};
+            formatted_blocks[named_doc->collection_name]->append(msg);
+        } else {
+            document filter;
+            filter << "_id" << view["_id"].get_oid();
+
+            mongocxx::model::replace_one msg{filter.view(), std::move(view)};
+            msg.upsert(true);
+
+            formatted_blocks[named_doc->collection_name]->append(msg);
+        }
+    }
+
     void mongo_db_writer::write_block_operations(const signed_block& block, const operations& ops) {
         state_writer st_writer;
         //ilog("mongo_db_writer::write_block_operations ${e}", ("e", block.block_num()));
@@ -190,25 +210,15 @@ namespace mongo_db {
                 auto docs = op.visit(st_writer);
 
                 for (auto& named_doc : docs) {
-                    if (formatted_blocks.find(named_doc->collection_name) == formatted_blocks.end()) {
-                        formatted_blocks[named_doc->collection_name] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
-                    }
-
-                    mongocxx::model::insert_one insert_msg{named_doc->doc.view()};
-                    formatted_blocks[named_doc->collection_name]->append(insert_msg);
+                    write_document(named_doc);
                 }
             }
         }
 
-        for (auto &note: ops) {
-            auto docs = note.op.visit(st_writer);
-            for (auto& named_doc : docs) {
-                if (formatted_blocks.find(named_doc->collection_name) == formatted_blocks.end()) {
-                    formatted_blocks[named_doc->collection_name] = std::make_unique<mongocxx::bulk_write>(bulk_opts);
-                }
-
-                mongocxx::model::insert_one insert_msg{named_doc->doc.view()};
-                formatted_blocks[named_doc->collection_name]->append(insert_msg);
+        for (auto& op: ops) {
+            auto docs = op.visit(st_writer);
+            for (auto& named_doc: docs) {
+                write_document(named_doc);
             }
         }
     }
@@ -242,8 +252,8 @@ namespace mongo_db {
                     ilog("Failed to write blocks to Mongo DB");
                 }
             }
-            catch (...) {
-                ilog("Unknown exception while writing blocks to mongo");
+            catch (const std::exception& e) {
+                ilog("Unknown exception while writing blocks to mongo: ${e}", ("e", e.what()));
                 // If we got some errors writing block into mongo just skip this block and move on
                 formatted_blocks.erase(iter);
                 throw;

@@ -44,7 +44,7 @@ RUN \
     make EP_mnmlstc_core && \
     make && \
     make install && \
-    cd ..\.. && \
+    cd ../.. && \
     rm -rf mongo-cxx-driver && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \

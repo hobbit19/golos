@@ -4,6 +4,8 @@
 #include <golos/protocol/transaction.hpp>
 #include <golos/protocol/operations.hpp>
 
+#include <golos/plugins/mongo_db/mongo_db_types.hpp>
+
 #include <libraries/chain/include/golos/chain/operation_notification.hpp>
 
 #include <bsoncxx/builder/basic/document.hpp>
@@ -47,11 +49,12 @@ namespace mongo_db {
         void on_operation(const golos::chain::operation_notification& note);
 
     private:
-        using operations = std::vector<operation_notification>;
+        using operations = std::vector<operation>;
 
         void write_blocks();
         void write_raw_block(const signed_block& block, const operations&);
         void write_block_operations(const signed_block& block, const operations&);
+        void write_document(const named_document_ptr& named_doc);
 
         void format_block_info(const signed_block& block, document& doc);
         void format_transaction_info(const signed_transaction& tran, document& doc);

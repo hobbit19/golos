@@ -12,6 +12,8 @@
 #include <mongocxx/stdx.hpp>
 #include <mongocxx/uri.hpp>
 
+#include <fc/crypto/sha1.hpp>
+
 namespace golos {
 namespace plugins {
 namespace mongo_db {
@@ -31,7 +33,8 @@ namespace mongo_db {
     using named_document_ptr = std::unique_ptr<named_document>;
 
     inline void format_oid(document& doc, const std::string& name, const std::string& value) {
-        doc << name << bsoncxx::oid(value);
+        auto oid = fc::sha1::hash(value).str().substr(0, 24);
+        doc << name << bsoncxx::oid(oid);
     }
 
     inline void format_oid(document& doc, const std::string& value) {
@@ -45,9 +48,7 @@ namespace mongo_db {
     }
 
     inline void format_value(document& doc, const std::string& name, const std::string& value) {
-        if (!name.empty()) {
-            doc << name << value;
-        }
+        doc << name << value;
     }
 
     inline void format_value(document& doc, const std::string& name, const bool value) {
@@ -63,10 +64,7 @@ namespace mongo_db {
     }
 
     inline void format_value(document& doc, const std::string& name, const fc::time_point_sec& value) {
-        bsoncxx::types::b_timestamp t;
-        t.increment = 0;
-        t.timestamp = value.sec_since_epoch();
-        doc << name << t;
+        doc << name << value.to_iso_string();
     }
 
     inline void format_value(document& doc, const std::string& name, const shared_string& value) {
