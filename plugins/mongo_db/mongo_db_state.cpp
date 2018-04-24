@@ -369,8 +369,10 @@ namespace mongo_db {
         try {
             auto doc = create_document("curation_reward");
             auto &body = doc->doc;
-            auto vote_oid = std::string(op.comment_author) + "/" + op.comment_permlink + "/" + op.curator;
+            auto comment_oid = std::string(op.comment_author).append("/").append(op.comment_permlink);
+            auto vote_oid = comment_oid + "/" + op.curator;
 
+            format_oid(body, "comment", comment_oid);
             format_oid(body, "vote", vote_oid);
             format_value(body, "author", op.comment_author);
             format_value(body, "permlink", op.comment_permlink);
