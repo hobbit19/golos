@@ -91,11 +91,11 @@ namespace mongo_db {
             format_value(body, "mode", comment_mode);
             result.push_back(std::move(doc));
         }
-        catch (fc::exception& ex) {
-            ilog("MongoDB operations fc::exception during formatting comment. ${e}", ("e", ex.what()));
-        }
+//        catch (fc::exception& ex) {
+//            ilog("MongoDB operations fc::exception during formatting comment. ${e}", ("e", ex.what()));
+//        }
         catch (...) {
-            ilog("Unknown exception during formatting comment.");
+            // ilog("Unknown exception during formatting comment.");
         }
         return result;
     }
@@ -131,11 +131,11 @@ namespace mongo_db {
                 result.push_back(std::move(doc));
             }
         }
-        catch (fc::exception& ex) {
-            ilog("MongoDB operations fc::exception during formatting vote. ${e}", ("e", ex.what()));
-        }
+//        catch (fc::exception& ex) {
+//            ilog("MongoDB operations fc::exception during formatting vote. ${e}", ("e", ex.what()));
+//        }
         catch (...) {
-            ilog("Unknown exception during formatting vote.");
+            // ilog("Unknown exception during formatting vote.");
         }
 
         return result;
@@ -357,10 +357,8 @@ namespace mongo_db {
         try {
             auto doc = create_document("curation_reward");
             auto &body = doc->doc;
-            auto comment_oid = std::string(op.comment_author).append("/").append(op.comment_permlink);
-            auto vote_oid = comment_oid + "/" + op.curator;
+            auto vote_oid = std::string(op.comment_author) + "/" + op.comment_permlink + "/" + op.curator;
 
-            format_oid(body, "comment", comment_oid);
             format_oid(body, "vote", vote_oid);
             format_value(body, "author", op.comment_author);
             format_value(body, "permlink", op.comment_permlink);
